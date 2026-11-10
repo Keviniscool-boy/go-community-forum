@@ -52,7 +52,7 @@ export default {
 };
 </script>
 
-<!-- Add "scoped" attribute to limit CSS to this component only -->
+<!-- 样式块带上局部作用域属性后，只对本组件生效，不会污染其他页面 -->
 <style scoped lang="less">
 .header {
   width: 100%;

@@ -41,7 +41,7 @@ func InitTrans(locale string) (err error) {
 	var trans ut.Translator
 	trans, ok = uni.GetTranslator(locale)
 	if !ok {
-		// fallback to zh
+		// 请求的语言不存在时回退到中文，避免翻译器为空导致注册失败
 		trans, _ = uni.GetTranslator("zh")
 	}
 

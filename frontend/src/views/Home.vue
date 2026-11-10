@@ -109,7 +109,7 @@
 </template>
 
 <script>
-// @ is an alias to /src
+// @ 是源码目录的别名，导入时可代替冗长的相对路径
 
 export default {
 	name: "Home",
