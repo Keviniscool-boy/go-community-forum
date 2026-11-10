@@ -22,6 +22,8 @@ axios.interceptors.response.use(
 	},
 	(error) => {
 		console.log('error', error);
+		// 必须继续抛出，否则网络错误会被吞成成功回调里的空值
+		return Promise.reject(error);
 	}
 );
 
