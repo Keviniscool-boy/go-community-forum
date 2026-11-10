@@ -1,30 +1,32 @@
-
-import axios from 'axios';
+import axios from "axios";
 axios.defaults.baseURL = "/api/v1/";
-axios.interceptors.request.use((config) => {
-  let loginResult = JSON.parse(localStorage.getItem("loginResult"));
-  if (loginResult) { 
-	const token = loginResult.token
-	config.headers.Authorization = `Bearer ${token}`;
+axios.interceptors.request.use(
+  (config) => {
+    let loginResult = JSON.parse(localStorage.getItem("loginResult"));
+    if (loginResult) {
+      const token = loginResult.token;
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-  return config;
-}, (error) => {
-	return Promise.reject(error);
-});
+);
 
 axios.interceptors.response.use(
-	response => {
-		if (response.status === 200) {
-			return Promise.resolve(response.data);
-		} else {
-			return Promise.reject(response.data);
-		}
-	},
-	(error) => {
-		console.log('error', error);
-		// 必须继续抛出，否则网络错误会被吞成成功回调里的空值
-		return Promise.reject(error);
-	}
+  (response) => {
+    if (response.status === 200) {
+      return Promise.resolve(response.data);
+    } else {
+      return Promise.reject(response.data);
+    }
+  },
+  (error) => {
+    console.log("error", error);
+    // 必须继续抛出，否则网络错误会被吞成成功回调里的空值
+    return Promise.reject(error);
+  }
 );
 
 export default axios;

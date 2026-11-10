@@ -1,6 +1,6 @@
 <template>
   <header class="header">
-      <span class="logo" @click="goIndex">bluebell</span>
+    <span class="logo" @click="goIndex">bluebell</span>
     <div class="search">
       <label class="s-logo"></label>
       <input type="text" class="s-input" placeholder="搜索" />
@@ -23,20 +23,20 @@
 <script>
 export default {
   name: "HeadBar",
-  created(){
+  created() {
     this.$store.commit("init");
   },
   computed: {
     isLogin() {
       return this.$store.getters.isLogin;
     },
-    currUsername(){
+    currUsername() {
       console.log(this.$store.getters.username);
       return this.$store.getters.username;
-    }
+    },
   },
   methods: {
-    goIndex(){
+    goIndex() {
       this.$router.push({ name: "Home" });
     },
     goLogin() {
@@ -45,10 +45,10 @@ export default {
     goSignUp() {
       this.$router.push({ name: "SignUp" });
     },
-    goLogout(){
+    goLogout() {
       this.$store.commit("logout");
-    }
-  }
+    },
+  },
 };
 </script>
 
@@ -171,7 +171,7 @@ export default {
       position: absolute;
       background-color: #f9f9f9;
       min-width: 160px;
-      box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+      box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
       a {
         color: black;
         padding: 12px 16px;
@@ -179,12 +179,13 @@ export default {
         display: block;
         cursor: pointer;
       }
-      a:hover {background-color: #f1f1f1}
+      a:hover {
+        background-color: #f1f1f1;
+      }
     }
     .user-box:hover .dropdown-content {
       display: block;
     }
   }
-  
 }
 </style>

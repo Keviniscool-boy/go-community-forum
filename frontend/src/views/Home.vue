@@ -3,39 +3,40 @@
     <div class="left">
       <!-- <h4 class="c-l-title">热门帖子</h4> -->
       <div class="c-l-header">
-        <div class="new btn-iconfont"
-        :class="{ active: timeOrder }"
-        @click="selectOrder('time')"
+        <div
+          class="new btn-iconfont"
+          :class="{ active: timeOrder }"
+          @click="selectOrder('time')"
         >
           <i class="iconfont icon-polygonred"></i>New
         </div>
-        <div class="top btn-iconfont"
-         :class="{ active: scoreOrder }"
-         @click="selectOrder('score')"
+        <div
+          class="top btn-iconfont"
+          :class="{ active: scoreOrder }"
+          @click="selectOrder('score')"
         >
           <i class="iconfont icon-top"></i>Score
         </div>
         <button class="btn-publish" @click="goPublish">发表</button>
       </div>
       <ul class="c-l-list">
-        <li class="c-l-item"  v-for="post in postList" :key="post.id">
+        <li class="c-l-item" v-for="post in postList" :key="post.id">
           <div class="post">
             <a class="vote">
-              <span class="iconfont icon-up"
-              @click="vote(post.id, '1')"
-              ></span>
+              <span class="iconfont icon-up" @click="vote(post.id, '1')"></span>
             </a>
-            <span class="text">{{post.vote_num}}</span>
+            <span class="text">{{ post.vote_num }}</span>
             <a class="vote">
-              <span class="iconfont icon-down"
-              @click="vote(post.id, '-1')"
+              <span
+                class="iconfont icon-down"
+                @click="vote(post.id, '-1')"
               ></span>
             </a>
           </div>
           <div class="l-container" @click="goDetail(post.id)">
-            <h4 class="con-title">{{post.title}}</h4>
+            <h4 class="con-title">{{ post.title }}</h4>
             <div class="con-memo">
-              <p>{{post.content}}</p>
+              <p>{{ post.content }}</p>
             </div>
             <!-- <div class="user-btn">
               <span class="btn-item">
@@ -112,25 +113,25 @@
 // @ 是源码目录的别名，导入时可代替冗长的相对路径
 
 export default {
-	name: "Home",
+  name: "Home",
   components: {},
   data() {
     return {
       order: "time",
       page: 1,
-      postList: []
+      postList: [],
     };
   },
   methods: {
-    selectOrder(order){
+    selectOrder(order) {
       this.order = order;
-      this.getPostList()
+      this.getPostList();
     },
-    goPublish(){
+    goPublish() {
       this.$router.push({ name: "Publish" });
     },
-    goDetail(id){
-      this.$router.push({ name: "Content", params: { id: id }});
+    goDetail(id) {
+      this.$router.push({ name: "Content", params: { id: id } });
     },
     getPostList() {
       this.$axios({
@@ -139,9 +140,9 @@ export default {
         params: {
           page: this.page,
           order: this.order,
-        }
+        },
       })
-        .then(response => {
+        .then((response) => {
           console.log(response.data, 222);
           if (response.code == 1000) {
             this.postList = response.data;
@@ -149,42 +150,42 @@ export default {
             console.log(response.msg);
           }
         })
-        .catch(error => {
+        .catch((error) => {
           console.log(error);
         });
     },
-    vote(post_id, direction){
+    vote(post_id, direction) {
       this.$axios({
         method: "post",
         url: "/vote",
         data: JSON.stringify({
           post_id: post_id,
           direction: direction,
-        })
+        }),
       })
-        .then(response => {
+        .then((response) => {
           if (response.code == 1000) {
             console.log("vote success");
           } else {
             console.log(response.msg);
           }
         })
-        .catch(error => {
+        .catch((error) => {
           console.log(error);
         });
-    }
+    },
   },
-  mounted: function() {
+  mounted: function () {
     this.getPostList();
   },
-  computed:{
-    timeOrder(){
+  computed: {
+    timeOrder() {
       return this.order == "time";
     },
-    scoreOrder(){
+    scoreOrder() {
       return this.order == "score";
-    }
-  }
+    },
+  },
 };
 </script>
 

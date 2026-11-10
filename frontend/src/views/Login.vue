@@ -4,11 +4,25 @@
       <h2 class="form-title">登录</h2>
       <div class="form-group">
         <label for="name">用户名</label>
-        <input type="text" class="form-control" v-model="username" name="name" id="name" placeholder="用户名" />
+        <input
+          type="text"
+          class="form-control"
+          v-model="username"
+          name="name"
+          id="name"
+          placeholder="用户名"
+        />
       </div>
       <div class="form-group">
         <label for="pass">密码</label>
-        <input type="password" class="form-control" v-model="password"  name="pass" id="pass" placeholder="密码" />
+        <input
+          type="password"
+          class="form-control"
+          v-model="password"
+          name="pass"
+          id="pass"
+          placeholder="密码"
+        />
       </div>
       <div class="form-btn">
         <button type="button" class="btn btn-info" @click="submit">提交</button>
@@ -19,42 +33,41 @@
 
 <script>
 export default {
-	name: "Login",
-	data() {
-		return {
-			username: "",
-			password: "",
-			submitted: false
-		};
-	},
-	computed: {
-	},
-	created() {
-
-	},
-	methods: {
-		submit() {
-			this.$axios({
-				method: 'post',
-				url:'/login',
-				data: JSON.stringify({
-					username: this.username,
-					password: this.password
-				})
-			}).then((res)=>{
-				console.log(res.data)
-				if (res.code == 1000) {
-          localStorage.setItem("loginResult", JSON.stringify(res.data));
-          this.$store.commit("login", res.data);
-          this.$router.push({path: this.redirect || '/' })
-				} else {
-					console.log(res.msg)
-				}
-			}).catch((error)=>{
-				console.log(error)
-			})
-		}
-	}
+  name: "Login",
+  data() {
+    return {
+      username: "",
+      password: "",
+      submitted: false,
+    };
+  },
+  computed: {},
+  created() {},
+  methods: {
+    submit() {
+      this.$axios({
+        method: "post",
+        url: "/login",
+        data: JSON.stringify({
+          username: this.username,
+          password: this.password,
+        }),
+      })
+        .then((res) => {
+          console.log(res.data);
+          if (res.code == 1000) {
+            localStorage.setItem("loginResult", JSON.stringify(res.data));
+            this.$store.commit("login", res.data);
+            this.$router.push({ path: this.redirect || "/" });
+          } else {
+            console.log(res.msg);
+          }
+        })
+        .catch((error) => {
+          console.log(error);
+        });
+    },
+  },
 };
 </script>
 <style lang="less" scoped>

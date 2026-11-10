@@ -1,17 +1,23 @@
-
 <template>
   <div class="content">
     <div class="left">
       <div class="post-name">我好想写点什么</div>
       <div class="post-type">
-        <input type="text" class="post-type-value" placeholder="选择一个频道" v-model="selectCommunity.name" @click="showCommunity()"/>
+        <input
+          type="text"
+          class="post-type-value"
+          placeholder="选择一个频道"
+          v-model="selectCommunity.name"
+          @click="showCommunity()"
+        />
         <ul class="post-type-options" v-show="showCommunityList">
-          <li class="post-type-cell"
+          <li
+            class="post-type-cell"
             v-for="(community, index) in communityList"
             :key="community.id"
             @click="selected(index)"
           >
-            {{community.name}}
+            {{ community.name }}
           </li>
         </ul>
         <i class="p-icon"></i>
@@ -27,7 +33,14 @@
         </ul>
         <div class="post-sub-container">
           <div class="post-sub-header">
-            <textarea class="post-title" id cols="30" rows="10" v-model="title" placeholder="标题"></textarea>
+            <textarea
+              class="post-title"
+              id
+              cols="30"
+              rows="10"
+              v-model="title"
+              placeholder="标题"
+            ></textarea>
             <span class="textarea-num">0/300</span>
           </div>
           <!---此处放置富文本--->
@@ -52,9 +65,7 @@
     </div>
     <div class="right">
       <div class="post-rank">
-        <h5 class="p-r-title">
-          <i class="p-r-icon"></i>发帖规范
-        </h5>
+        <h5 class="p-r-title"><i class="p-r-icon"></i>发帖规范</h5>
         <ul class="p-r-content">
           <li class="p-r-item">1.网络不是法外之地</li>
           <li class="p-r-item">2.网络不是法外之地</li>
@@ -67,14 +78,14 @@
 
 <script>
 export default {
-	name: "Publish",
+  name: "Publish",
   data() {
     return {
       title: "",
       content: "",
       showCommunityList: false,
       selectCommunity: {},
-      communityList: []
+      communityList: [],
     };
   },
   methods: {
@@ -85,10 +96,10 @@ export default {
         data: JSON.stringify({
           title: this.title,
           content: this.content,
-          community_id: this.selectCommunity.id
-        })
+          community_id: this.selectCommunity.id,
+        }),
       })
-        .then(response => {
+        .then((response) => {
           console.log(response.data);
           if (response.code == 1000) {
             this.$router.push({ path: this.redirect || "/" });
@@ -96,16 +107,16 @@ export default {
             console.log(response.msg);
           }
         })
-        .catch(error => {
+        .catch((error) => {
           console.log(error);
         });
     },
     getCommunityList() {
       this.$axios({
         method: "get",
-        url: "/community"
+        url: "/community",
       })
-        .then(response => {
+        .then((response) => {
           console.log(response.data);
           if (response.code == 1000) {
             this.communityList = response.data;
@@ -113,22 +124,22 @@ export default {
             console.log(response.msg);
           }
         })
-        .catch(error => {
+        .catch((error) => {
           console.log(error);
         });
     },
-    showCommunity(){
+    showCommunity() {
       this.showCommunityList = !this.showCommunityList;
     },
     selected(index) {
       this.selectCommunity = this.communityList[index];
       this.showCommunityList = false;
-      console.log(this.selectCommunity)
-    }
+      console.log(this.selectCommunity);
+    },
   },
-  mounted: function() {
+  mounted: function () {
     this.getCommunityList();
-  }
+  },
 };
 </script>
 <style lang="less" scoped>

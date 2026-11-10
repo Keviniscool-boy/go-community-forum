@@ -12,8 +12,8 @@
           </a>
         </div>
         <div class="l-container">
-          <h4 class="con-title">{{post.title}}</h4>
-          <div class="con-info">{{post.content}}</div>
+          <h4 class="con-title">{{ post.title }}</h4>
+          <div class="con-info">{{ post.content }}</div>
           <div class="user-btn">
             <span class="btn-item">
               <i class="iconfont icon-comment"></i>comment
@@ -47,7 +47,7 @@
         <h5 class="t-header"></h5>
         <div class="t-info">
           <a class="avatar"></a>
-          <span class="topic-name">b/{{post.community_name}}</span>
+          <span class="topic-name">b/{{ post.community_name }}</span>
         </div>
         <p class="t-desc">树洞 树洞 无限树洞的树洞</p>
         <ul class="t-num">
@@ -69,19 +69,19 @@
 
 <script>
 export default {
-	name: "Content",
-  data(){
+  name: "Content",
+  data() {
     return {
-      post:{},
-    }
+      post: {},
+    };
   },
-  methods:{
+  methods: {
     getPostDetail() {
       this.$axios({
         method: "get",
-        url: "/post/"+ this.$route.params.id,
+        url: "/post/" + this.$route.params.id,
       })
-        .then(response => {
+        .then((response) => {
           console.log(1, response.data);
           if (response.code == 1000) {
             this.post = response.data;
@@ -89,14 +89,14 @@ export default {
             console.log(response.msg);
           }
         })
-        .catch(error => {
+        .catch((error) => {
           console.log(error);
         });
     },
   },
-  mounted: function() {
+  mounted: function () {
     this.getPostDetail();
-  }
+  },
 };
 </script>
 
@@ -161,7 +161,7 @@ export default {
           text-decoration: none;
           word-break: break-word;
         }
-        .con-info{
+        .con-info {
           margin: 25px 0;
           padding: 15px 0;
           border-bottom: 1px solid grey;
@@ -184,7 +184,7 @@ export default {
             display: -webkit-flex;
             align-items: center;
             margin-right: 10px;
-            .iconfont{
+            .iconfont {
               margin-right: 4px;
             }
           }

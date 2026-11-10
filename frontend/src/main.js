@@ -1,12 +1,11 @@
-import Vue from 'vue'
-import App from './App.vue'
-import router from './router'
-import store from './store'
-import axios from './service/api'
+import Vue from "vue";
+import App from "./App.vue";
+import router from "./router";
+import store from "./store";
+import axios from "./service/api";
 
 Vue.prototype.$axios = axios;
-Vue.config.productionTip = false
-
+Vue.config.productionTip = false;
 
 router.beforeEach((to, from, next) => {
   console.log(to);
@@ -15,31 +14,30 @@ router.beforeEach((to, from, next) => {
     if (localStorage.getItem("loginResult")) {
       next();
     } else {
-      if (to.path === '/login') {
+      if (to.path === "/login") {
         next();
       } else {
         next({
-          path: '/login'
-        })
+          path: "/login",
+        });
       }
     }
-  }
-  else {
+  } else {
     next();
   }
   if (to.fullPath == "/login") {
     if (localStorage.getItem("loginResult")) {
       next({
-        path: from.fullPath
+        path: from.fullPath,
       });
     } else {
       next();
     }
   }
-})
+});
 
 new Vue({
   router,
   store,
-  render: h => h(App)
-}).$mount('#app')
+  render: (h) => h(App),
+}).$mount("#app");
