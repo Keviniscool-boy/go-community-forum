@@ -150,6 +150,7 @@ func toAuthUser(u *models.User) *models.AuthUser {
 		Email:     u.Email,
 		Username:  u.Username,
 		AvatarURL: u.AvatarURL,
+		Bio:       u.Bio,
 	}
 }
 

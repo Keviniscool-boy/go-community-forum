@@ -91,3 +91,27 @@ func LatestQuestionIDsForFeed(limit int) (ids []int64, err error) {
 	err = db.Select(&ids, "SELECT question_id FROM question WHERE status = 1 ORDER BY create_time DESC LIMIT ?", limit)
 	return
 }
+
+// UpdateQuestion 作者编辑问题（仅 status=1 可编辑，返回是否实际更新）
+func UpdateQuestion(questionID, authorID int64, title, description string) (bool, error) {
+	result, err := db.Exec(
+		"UPDATE question SET title = ?, description = ? WHERE question_id = ? AND author_id = ? AND status = 1",
+		title, description, questionID, authorID)
+	if err != nil {
+		return false, err
+	}
+	n, _ := result.RowsAffected()
+	return n > 0, nil
+}
+
+// SoftDeleteQuestion 作者软删除问题（status=0；Feed 通过 JOIN qu.status=1 自动隐藏其回答）
+func SoftDeleteQuestion(questionID, authorID int64) (bool, error) {
+	result, err := db.Exec(
+		"UPDATE question SET status = 0 WHERE question_id = ? AND author_id = ? AND status = 1",
+		questionID, authorID)
+	if err != nil {
+		return false, err
+	}
+	n, _ := result.RowsAffected()
+	return n > 0, nil
+}

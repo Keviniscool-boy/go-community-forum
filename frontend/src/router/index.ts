@@ -18,6 +18,7 @@ const router = createRouter({
         { path: 'topics/:id', name: 'topic', component: () => import('@/views/TopicView.vue'), meta: { title: '话题详情' } },
         { path: 'users/:id', name: 'user-profile', component: () => import('@/views/UserProfileView.vue'), meta: { title: '用户主页' } },
         { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { title: '通知', requiresAuth: true } },
+        { path: 'settings/profile', name: 'settings-profile', component: () => import('@/views/SettingsProfileView.vue'), meta: { title: '个人资料', requiresAuth: true } },
       ],
     },
     {

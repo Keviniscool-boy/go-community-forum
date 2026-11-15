@@ -89,3 +89,20 @@ type ParamCreateTopic struct {
 	Name        string `json:"name" binding:"required,min=1,max=64"`
 	Description string `json:"description" binding:"max=500"`
 }
+
+// ParamUpdateQuestion 编辑问题请求
+type ParamUpdateQuestion struct {
+	Title       string `json:"title" binding:"required,min=5,max=200"`
+	Description string `json:"description" binding:"max=10000"`
+}
+
+// ParamUpdateAnswer 编辑回答请求
+type ParamUpdateAnswer struct {
+	Content string `json:"content" binding:"required,min=1,max=100000"`
+}
+
+// ParamUpdateProfile 更新个人资料请求
+type ParamUpdateProfile struct {
+	Bio       string `json:"bio" binding:"max=500"`
+	AvatarURL string `json:"avatar_url" binding:"max=500"`
+}

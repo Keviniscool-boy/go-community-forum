@@ -70,3 +70,23 @@ export function fetchAnswers(
 ) {
   return http.get<PageResult<AnswerDetail>>(`questions/${questionId}/answers`, { params })
 }
+
+// 编辑问题（仅作者）
+export function updateQuestion(id: string, data: { title: string; description: string }) {
+  return http.put<null>(`questions/${id}`, data)
+}
+
+// 删除问题（软删除，仅作者）
+export function deleteQuestion(id: string) {
+  return http.delete<null>(`questions/${id}`)
+}
+
+// 编辑回答（仅作者）
+export function updateAnswer(id: string, content: string) {
+  return http.put<null>(`answers/${id}`, { content })
+}
+
+// 删除回答（软删除，仅作者）
+export function deleteAnswer(id: string) {
+  return http.delete<null>(`answers/${id}`)
+}

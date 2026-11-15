@@ -87,12 +87,12 @@ func UnfollowUserHandler(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
-// @Param answer_id path int true "回答 ID"
+// @Param id path int true "回答 ID"
 // @Param object body models.ParamVoteAnswer true "投票方向"
 // @Success 200 {object} controller.Response
-// @Router /answers/{answer_id}/vote [post]
+// @Router /answers/{id}/vote [post]
 func VoteAnswerHandler(c *gin.Context) {
-	answerID, err := strconv.ParseInt(c.Param("answer_id"), 10, 64)
+	answerID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || answerID <= 0 {
 		ResponseError(c, CodeInvalidParams)
 		return
@@ -124,11 +124,11 @@ func VoteAnswerHandler(c *gin.Context) {
 // @Tags 互动相关接口
 // @Produce json
 // @Security ApiKeyAuth
-// @Param answer_id path int true "回答 ID"
+// @Param id path int true "回答 ID"
 // @Success 200 {object} controller.Response
-// @Router /answers/{answer_id}/collect [post]
+// @Router /answers/{id}/collect [post]
 func CollectAnswerHandler(c *gin.Context) {
-	answerID, err := strconv.ParseInt(c.Param("answer_id"), 10, 64)
+	answerID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || answerID <= 0 {
 		ResponseError(c, CodeInvalidParams)
 		return
@@ -155,11 +155,11 @@ func CollectAnswerHandler(c *gin.Context) {
 // @Tags 互动相关接口
 // @Produce json
 // @Security ApiKeyAuth
-// @Param answer_id path int true "回答 ID"
+// @Param id path int true "回答 ID"
 // @Success 200 {object} controller.Response
-// @Router /answers/{answer_id}/collect [delete]
+// @Router /answers/{id}/collect [delete]
 func UncollectAnswerHandler(c *gin.Context) {
-	answerID, err := strconv.ParseInt(c.Param("answer_id"), 10, 64)
+	answerID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || answerID <= 0 {
 		ResponseError(c, CodeInvalidParams)
 		return
@@ -261,11 +261,11 @@ func GetQuestionInteractionsHandler(c *gin.Context) {
 // @Summary 回答互动状态
 // @Tags 互动相关接口
 // @Produce json
-// @Param answer_id path int true "回答 ID"
+// @Param id path int true "回答 ID"
 // @Success 200 {object} controller.Response{data=map[string]interface{}}
-// @Router /answers/{answer_id}/interactions [get]
+// @Router /answers/{id}/interactions [get]
 func GetAnswerInteractionsHandler(c *gin.Context) {
-	answerID, err := strconv.ParseInt(c.Param("answer_id"), 10, 64)
+	answerID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || answerID <= 0 {
 		ResponseError(c, CodeInvalidParams)
 		return

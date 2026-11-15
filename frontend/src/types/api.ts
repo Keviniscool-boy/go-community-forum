@@ -31,6 +31,7 @@ export interface UserInfo {
   username: string
   email?: string
   avatar_url?: string
+  bio?: string
 }
 
 export interface LoginResult {

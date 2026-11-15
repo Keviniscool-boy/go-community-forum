@@ -35,6 +35,7 @@ const (
 
 	CodeFeedRefreshing
 	CodeFeedExpired
+	CodeForbidden
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -64,6 +65,7 @@ var codeMsgMap = map[ResCode]string{
 	CodeVerifyCodeLocked:   "错误次数过多，请重新获取验证码",
 	CodeFeedRefreshing:     "内容更新中，请稍后重试",
 	CodeFeedExpired:        "列表已更新，请刷新重试",
+	CodeForbidden:          "无权操作该内容",
 }
 
 // 创建一个函数，传入code返回msg

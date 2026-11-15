@@ -10,6 +10,28 @@ jobs:
   backend:
     name: Backend (Go)
     runs-on: ubuntu-latest
+    services:
+      # 集成测试用真实 MySQL/Redis（迁移链、关注流分页、并发互动一致性）
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_test_root
+        ports:
+          - 33061:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -pci_test_root"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+      redis:
+        image: redis:7
+        ports:
+          - 26379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,11 +47,13 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Test
+      - name: Test (unit + integration)
+        env:
+          BB_TEST_MYSQL_DSN: 'root:ci_test_root@tcp(127.0.0.1:33061)/'
         run: go test ./...
 
   frontend:
-    name: Frontend (Vue)
+    name: Frontend (Vue 3)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -46,8 +70,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
       - name: Build
         working-directory: frontend
-        env:
-          NODE_OPTIONS: --openssl-legacy-provider
         run: npm run build

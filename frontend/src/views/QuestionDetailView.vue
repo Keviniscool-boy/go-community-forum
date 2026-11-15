@@ -2,9 +2,9 @@
 // 问题详情页：问题正文 + 关注 + 回答列表（投票/收藏/评论）+ 回答编辑器
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { View as ViewIcon, CaretTop, Star, ChatDotRound } from '@element-plus/icons-vue'
-import { fetchQuestionDetail, fetchAnswers, createAnswer, type QuestionDetail, type AnswerDetail } from '@/api/question'
+import { fetchQuestionDetail, fetchAnswers, createAnswer, updateQuestion, deleteQuestion, updateAnswer, deleteAnswer, type QuestionDetail, type AnswerDetail } from '@/api/question'
 import { voteAnswer, collectAnswer, uncollectAnswer, followQuestion, unfollowQuestion, fetchQuestionInteractions, fetchAnswerInteractions, fetchComments, createComment, type CommentDetail } from '@/api/interaction'
 import { followUser, unfollowUser } from '@/api/interaction'
 import { useAuthStore } from '@/stores/auth'
@@ -51,6 +51,91 @@ const commentSubmitting = ref(false)
 // 回答编辑器状态
 const answerContent = ref('')
 const submitting = ref(false)
+
+// 编辑/删除权限：仅作者本人
+const isQuestionAuthor = computed(() => !!auth.user && question.value?.author_id === auth.user.user_id)
+const editDialogVisible = ref(false)
+const editTitle = ref('')
+const editDescription = ref('')
+const editSubmitting = ref(false)
+const editAnswerId = ref('')
+const editAnswerContent = ref('')
+const editAnswerSubmitting = ref(false)
+
+function openEditQuestion() {
+  if (!question.value) return
+  editTitle.value = question.value.title
+  editDescription.value = question.value.description
+  editDialogVisible.value = true
+}
+
+async function submitEditQuestion() {
+  if (!editTitle.value.trim()) return ElMessage.warning('标题不能为空')
+  editSubmitting.value = true
+  try {
+    await updateQuestion(questionId, { title: editTitle.value.trim(), description: editDescription.value.trim() })
+    editDialogVisible.value = false
+    ElMessage.success('问题已更新')
+    await load()
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    editSubmitting.value = false
+  }
+}
+
+async function onDeleteQuestion() {
+  try {
+    await ElMessageBox.confirm('删除后问题将不再展示，确定删除？', '删除问题', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await deleteQuestion(questionId)
+    ElMessage.success('问题已删除')
+    router.push('/')
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  }
+}
+
+function openEditAnswer(a: AnswerDetail) {
+  editAnswerId.value = a.id
+  editAnswerContent.value = a.content
+  editAnswerDialogVisible.value = true
+}
+const editAnswerDialogVisible = ref(false)
+
+async function submitEditAnswer() {
+  if (!editAnswerContent.value.trim()) return ElMessage.warning('内容不能为空')
+  editAnswerSubmitting.value = true
+  try {
+    await updateAnswer(editAnswerId.value, editAnswerContent.value.trim())
+    editAnswerDialogVisible.value = false
+    ElMessage.success('回答已更新')
+    await loadAnswers(true)
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    editAnswerSubmitting.value = false
+  }
+}
+
+async function onDeleteAnswer(a: AnswerDetail) {
+  try {
+    await ElMessageBox.confirm('删除后回答将不再展示，确定删除？', '删除回答', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await deleteAnswer(a.id)
+    ElMessage.success('回答已删除')
+    await load()
+    await loadAnswers(true)
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  }
+}
 
 async function load() {
   loading.value = true
@@ -292,7 +377,25 @@ onMounted(() => {
           <el-button size="small" round @click="onFollowAuthor">
             {{ authorFollowed ? '已关注作者' : '关注作者' }}
           </el-button>
+          <template v-if="isQuestionAuthor">
+            <el-button size="small" plain @click="openEditQuestion">编辑</el-button>
+            <el-button size="small" plain type="danger" @click="onDeleteQuestion">删除</el-button>
+          </template>
         </div>
+        <el-dialog v-model="editDialogVisible" title="编辑问题" width="90%" style="max-width: 640px">
+          <el-form label-position="top">
+            <el-form-item label="标题">
+              <el-input v-model="editTitle" maxlength="200" show-word-limit />
+            </el-form-item>
+            <el-form-item label="补充说明">
+              <el-input v-model="editDescription" type="textarea" :rows="6" maxlength="10000" />
+            </el-form-item>
+          </el-form>
+          <template #footer>
+            <el-button @click="editDialogVisible = false">取消</el-button>
+            <el-button type="primary" :loading="editSubmitting" @click="submitEditQuestion">保存</el-button>
+          </template>
+        </el-dialog>
       </article>
 
       <!-- 回答区 -->
@@ -331,6 +434,10 @@ onMounted(() => {
               <button class="footer-btn" :class="{ active: collectMap[a.id] }" @click="onCollect(a)">
                 <el-icon><Star /></el-icon>{{ collectMap[a.id] ? '已收藏' : '收藏' }} · {{ a.collect_count }}
               </button>
+              <template v-if="auth.user?.user_id === a.author_id">
+                <button class="footer-btn" @click="openEditAnswer(a)">编辑</button>
+                <button class="footer-btn danger" @click="onDeleteAnswer(a)">删除</button>
+              </template>
             </div>
           </div>
         </article>
@@ -365,6 +472,14 @@ onMounted(() => {
           加载更多评论
         </el-button>
       </div>
+
+        <el-dialog v-model="editAnswerDialogVisible" title="编辑回答" width="90%" style="max-width: 640px">
+          <el-input v-model="editAnswerContent" type="textarea" :rows="8" maxlength="100000" />
+          <template #footer>
+            <el-button @click="editAnswerDialogVisible = false">取消</el-button>
+            <el-button type="primary" :loading="editAnswerSubmitting" @click="submitEditAnswer">保存</el-button>
+          </template>
+        </el-dialog>
 
       <!-- 回答编辑器 -->
       <div class="bb-card answer-editor">
@@ -536,6 +651,10 @@ onMounted(() => {
 .a-meta {
   color: var(--bb-text-tertiary);
   font-size: 12px;
+}
+
+.footer-btn.danger:hover {
+  color: #f56c6c;
 }
 
 .footer-btn {

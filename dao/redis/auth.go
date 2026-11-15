@@ -52,9 +52,9 @@ end
 if saved ~= ARGV[1] then
   local tries = redis.call('INCR', KEYS[2])
   if tries == 1 then
-    redis.call('EXPIRE', KEYS[2], ARGV[2])
+    redis.call('EXPIRE', KEYS[2], ARGV[3])
   end
-  if tries > tonumber(ARGV[1]) then
+  if tries > tonumber(ARGV[2]) then
     redis.call('DEL', KEYS[1])
     return 2
   end
@@ -113,7 +113,7 @@ func VerifyAuthCode(email, purpose, code string) error {
 	codeKey := getRedisKey(keyAuthCodePrefix + purpose + ":" + email)
 	attemptKey := getRedisKey(keyAuthAttempts + purpose + ":" + email)
 	res, err := verifyScript.Run(ctx, rdb, []string{codeKey, attemptKey},
-		authMaxAttempts, int(authCodeTTL.Seconds())).Int()
+		code, authMaxAttempts, int(authCodeTTL.Seconds())).Int()
 	if err != nil {
 		// Redis 脚本执行失败：明确上抛系统错误
 		return fmt.Errorf("verify code script failed: %w", err)

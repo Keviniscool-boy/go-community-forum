@@ -14,7 +14,7 @@
 
 ## 项目简介
 
-Bluebell 是一个前后端分离的社区论坛项目，最初作为 Go Web 开发学习项目逐步演进而来。后端基于 Gin 提供 RESTful API，使用 JWT 实现无状态鉴权；MySQL 负责用户、社区与帖子等关系数据的持久化，Redis 承担投票计数、帖子热度与最新排序；前端使用 Vue 2 全家桶，通过 Nginx 反向代理与后端衔接。项目支持 Docker Compose 一键拉起全部服务，内置 Swagger 接口文档、pprof 性能分析与 GitHub Actions 持续集成。
+Bluebell 是一个前后端分离的社区论坛项目，最初作为 Go Web 开发学习项目逐步演进而来。后端基于 Gin 提供 RESTful API，使用 JWT 实现无状态鉴权；MySQL 负责用户、社区与帖子等关系数据的持久化，Redis 承担投票计数、帖子热度与最新排序；前端使用 Vue 3 + Vite + TypeScript，通过 Nginx 反向代理与后端衔接。项目支持 Docker Compose 一键拉起全部服务，内置 Swagger 接口文档、pprof 性能分析与 GitHub Actions 持续集成。
 
 ## 功能特性
 
@@ -120,7 +120,21 @@ Bluebell 是一个前后端分离的社区论坛项目，最初作为 Go Web 开
 | 后端 API      | http://localhost:8888                   |
 | Swagger 文档  | http://localhost:8888/swagger/index.html |
 
-停止服务：`docker compose down`（仅在确定要清空数据时使用 `docker compose down -v`）。
+停止服务：`docker compose down`。
+**警告**：`docker compose down -v` 会删除 `mysql_data` / `redis_data` 数据卷，数据库将清空恢复到初始状态，仅在确定不要数据时使用。
+
+### 数据库迁移与数据持久化
+
+- **版本化迁移**：服务启动时自动执行 `models/migrations/` 迁移链（版本记录在 `schema_migrations` 表，`GET_LOCK` 防多实例并发）。空库、Compose 初始化库（仅基线）、旧生产库都走同一条链。
+- **旧库升级**：旧用户的 NULL 邮箱自动清洗为 `legacy_<user_id>@placeholder.invalid`（RFC 2606 保留 TLD，不可作为登录邮箱），`email_verified` 保持 0。
+- **关闭自动迁移**：配置 `mysql.auto_migrate: false`（或环境变量 `MYSQL_AUTO_MIGRATE=false`）后启动不再执行迁移，需要人工运行 SQL。
+- **备份**：`docker exec go-community-forum-mysql8019-1 mysqldump -uroot -p$MYSQL_ROOT_PASSWORD bluebell > backup.sql`。
+- **恢复**：先建空库再导入备份，服务启动时迁移链会补齐缺失的结构变更。
+- **重复执行安全**：迁移按版本记录跳过已应用项，服务重启不会重复执行。
+
+### 旧接口兼容说明
+
+旧的用户名注册/登录接口（`/signup`、`/login`）在过渡期保留：旧用户注册时邮箱为占位地址（未验证），需要重置邮箱才能使用邮箱登录。计划在邮箱绑定流程上线后废弃旧接口。
 
 ### 方式二：本地开发
 
@@ -189,7 +203,7 @@ bluebell/
 ├── settings/     # 配置加载与示例配置
 ├── logger/       # Zap 日志封装
 ├── docs/         # Swagger 自动生成文件
-├── frontend/     # Vue 2 前端
+├── frontend/     # Vue 3 + Vite + TS 前端
 ├── Dockerfile    # 后端镜像
 ├── docker-compose.yml
 └── main.go       # 程序入口

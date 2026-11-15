@@ -111,3 +111,39 @@ func CountAnswersByQuestion(questionID int64) (int, error) {
 	err := db.Get(&count, "SELECT COUNT(answer_id) FROM answer WHERE question_id = ? AND status = 1", questionID)
 	return count, err
 }
+
+// UpdateAnswer 作者编辑回答
+func UpdateAnswer(answerID, authorID int64, content string) (bool, error) {
+	result, err := db.Exec(
+		"UPDATE answer SET content = ? WHERE answer_id = ? AND author_id = ? AND status = 1",
+		content, answerID, authorID)
+	if err != nil {
+		return false, err
+	}
+	n, _ := result.RowsAffected()
+	return n > 0, nil
+}
+
+// SoftDeleteAnswer 作者软删除回答，并以关系表为准重算问题回答数
+func SoftDeleteAnswer(answerID, authorID int64) (bool, error) {
+	tx, err := db.Beginx()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(
+		"UPDATE answer SET status = 0 WHERE answer_id = ? AND author_id = ? AND status = 1",
+		answerID, authorID)
+	if err != nil {
+		return false, err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return false, nil
+	}
+	if _, err = tx.Exec(
+		"UPDATE question SET answer_count = (SELECT COUNT(*) FROM answer WHERE question_id = ? AND status = 1) "+
+			"WHERE question_id = (SELECT question_id FROM answer WHERE answer_id = ?)", answerID, answerID); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}

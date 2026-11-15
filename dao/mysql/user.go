@@ -243,3 +243,9 @@ func ListUserAnswers(userID int64, limit int) (answers []*models.ApiAnswerDetail
 		WHERE a.author_id = ? AND a.status = 1 ORDER BY a.create_time DESC LIMIT ?`, userID, limit)
 	return
 }
+
+// UpdateProfile 更新个人资料（bio / avatar_url）
+func UpdateProfile(userID int64, bio, avatarURL string) error {
+	_, err := db.Exec("UPDATE user SET bio = ?, avatar_url = ? WHERE user_id = ?", bio, avatarURL, userID)
+	return err
+}

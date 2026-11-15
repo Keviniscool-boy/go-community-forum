@@ -44,4 +44,5 @@ type AuthUser struct {
 	Email     string `json:"email"`
 	Username  string `json:"username"`
 	AvatarURL string `json:"avatar_url"`
+	Bio       string `json:"bio"`
 }

@@ -51,3 +51,8 @@ export function resetPassword(data: {
 }) {
   return http.post<null>('auth/reset-password', data)
 }
+
+// 更新个人资料（简介/头像地址）
+export function updateProfile(data: { bio: string; avatar_url: string }) {
+  return http.put<null>('auth/profile', data)
+}
