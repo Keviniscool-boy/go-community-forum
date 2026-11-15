@@ -27,6 +27,7 @@ const (
 
 	CodeQuestionNotExist
 	CodeAnswerNotExist
+	CodeTopicExist
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -50,6 +51,7 @@ var codeMsgMap = map[ResCode]string{
 	CodeAccountBanned:      "账号已被禁用",
 	CodeQuestionNotExist:   "问题不存在",
 	CodeAnswerNotExist:     "回答不存在",
+	CodeTopicExist:         "话题已存在",
 }
 
 // 创建一个函数，传入code返回msg

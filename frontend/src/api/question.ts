@@ -15,6 +15,7 @@ export interface QuestionDetail {
   author_id: string
   author_name: string
   answer_count: number
+  comment_count: number
   follower_count: number
   view_count: number
   status: number

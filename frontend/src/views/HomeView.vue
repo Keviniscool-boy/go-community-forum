@@ -1,26 +1,45 @@
 <script setup lang="ts">
-// 首页：Feed 列表（M1 调用旧 /posts2 接口）
-import { onMounted } from 'vue'
-import { useFeedStore, type FeedTab } from '@/stores/feed'
+// 首页：Feed 列表（推荐/关注/最新，cursor 分页加载）
+import { onMounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useFeedStore, type FeedType } from '@/stores/feed'
+import { useAuthStore } from '@/stores/auth'
 import FeedCard from '@/components/FeedCard.vue'
 import LoadingState from '@/components/LoadingState.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 
 const feed = useFeedStore()
+const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 
-const tabs: { key: FeedTab; label: string }[] = [
+const tabs: { key: FeedType; label: string }[] = [
   { key: 'recommend', label: '推荐' },
+  { key: 'following', label: '关注' },
   { key: 'latest', label: '最新' },
-  { key: 'hot', label: '热榜' },
 ]
 
+// 深链支持：/hot 进入时直接切到热榜
+const isHotPage = computed(() => route.path === '/hot')
+
 onMounted(() => {
+  if (isHotPage.value) {
+    feed.switchTab('hot')
+  }
   if (feed.list.length === 0) feed.load(true)
 })
 
 function onLoadMore() {
   feed.load()
+}
+
+function onSwitchTab(key: FeedType) {
+  if (key === 'following' && !auth.isLoggedIn) {
+    router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  feed.switchTab(key)
 }
 </script>
 
@@ -31,10 +50,17 @@ function onLoadMore() {
         v-for="tab in tabs"
         :key="tab.key"
         class="tab-item"
-        :class="{ active: feed.tab === tab.key }"
-        @click="feed.switchTab(tab.key)"
+        :class="{ active: !isHotPage && feed.tab === tab.key }"
+        @click="onSwitchTab(tab.key)"
       >
         {{ tab.label }}
+      </button>
+      <button
+        class="tab-item"
+        :class="{ active: feed.tab === 'hot' }"
+        @click="feed.switchTab('hot')"
+      >
+        热榜
       </button>
     </div>
 
@@ -45,10 +71,10 @@ function onLoadMore() {
       <ErrorState :text="feed.error" @retry="feed.load(true)" />
     </div>
     <div v-else-if="feed.list.length === 0" class="bb-card">
-      <EmptyState text="还没有内容，快去发布第一条帖子吧" />
+      <EmptyState :text="feed.tab === 'following' ? '关注一些用户后，这里会展示他们的动态' : '还没有内容，快去发布第一个问题吧'" />
     </div>
     <template v-else>
-      <FeedCard v-for="post in feed.list" :key="post.id" :post="post" />
+      <FeedCard v-for="item in feed.list" :key="`${item.item_type}-${item.item_id}`" :item="item" />
       <div class="load-more">
         <el-button
           v-if="!feed.finished"

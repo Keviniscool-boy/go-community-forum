@@ -1,14 +1,16 @@
 <script setup lang="ts">
-// 顶部导航：Logo、搜索框、发布按钮、用户头像（移动端增加菜单按钮）
-import { ref, computed } from 'vue'
+// 顶部导航：Logo、搜索框、提问按钮、通知铃铛、用户头像（移动端增加菜单按钮）
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Menu, Search } from '@element-plus/icons-vue'
+import { Menu, Search, Bell } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { useNotificationStore } from '@/stores/notification'
 
 const emit = defineEmits<{ (e: 'toggle-sidebar'): void }>()
 
 const auth = useAuthStore()
+const notification = useNotificationStore()
 const router = useRouter()
 
 const keyword = ref('')
@@ -21,13 +23,24 @@ const defaultAvatar = computed(
     ),
 )
 
+onMounted(() => {
+  if (auth.isLoggedIn) notification.startPolling()
+})
+
+onBeforeUnmount(() => notification.stopPolling())
+
 function onSearch() {
-  // 搜索接口在 M5 接入，先提示
+  // 搜索接口后续接入，先提示
   if (keyword.value.trim()) ElMessage.info('搜索功能即将上线')
+}
+
+function onBellClick() {
+  router.push('/notifications')
 }
 
 function onAvatarCommand(command: string) {
   if (command === 'logout') {
+    notification.stopPolling()
     auth.logout()
     ElMessage.success('已退出登录')
     router.push('/login')
@@ -52,6 +65,9 @@ function onAvatarCommand(command: string) {
       <div class="nav-actions">
         <el-button type="primary" size="small" round @click="router.push('/questions/ask')">提问</el-button>
         <template v-if="auth.isLoggedIn && auth.user">
+          <el-badge :value="notification.unreadCount" :hidden="notification.unreadCount === 0" :max="99">
+            <el-icon class="bell-btn" @click="onBellClick"><Bell /></el-icon>
+          </el-badge>
           <el-dropdown trigger="click" @command="onAvatarCommand">
             <el-avatar :size="32" :src="auth.user.avatar_url || defaultAvatar" />
             <template #dropdown>
@@ -111,9 +127,19 @@ function onAvatarCommand(command: string) {
 .nav-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   margin-left: auto;
   flex-shrink: 0;
+}
+
+.bell-btn {
+  font-size: 20px;
+  color: var(--bb-text-secondary);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--bb-primary);
+  }
 }
 
 @media (max-width: 768px) {

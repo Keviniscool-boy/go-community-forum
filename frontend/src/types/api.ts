@@ -37,3 +37,9 @@ export interface LoginResult {
   token: string
   user?: UserInfo
 }
+
+// 问题详情（api/question.ts 定义主体，此处放引用用到的轻量结构）
+export interface QuestionBrief {
+  id: string
+  title: string
+}

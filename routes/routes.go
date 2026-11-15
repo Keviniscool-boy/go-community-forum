@@ -43,6 +43,41 @@ func Setup() *gin.Engine {
 	v1.GET("/questions/:id", controller.GetQuestionDetailHandler)
 	v1.POST("/questions/:question_id/answers", middlewares.JWTAuthMiddleware(), controller.CreateAnswerHandler)
 	v1.GET("/questions/:question_id/answers", controller.ListAnswersHandler)
+
+	// Feed 相关路由（following 需登录，其余公开）
+	v1.GET("/feed/:type", controller.GetFeedHandler)
+
+	// 互动相关路由
+	v1.POST("/users/:user_id/follow", middlewares.JWTAuthMiddleware(), controller.FollowUserHandler)
+	v1.DELETE("/users/:user_id/follow", middlewares.JWTAuthMiddleware(), controller.UnfollowUserHandler)
+	v1.POST("/answers/:answer_id/vote", middlewares.JWTAuthMiddleware(), controller.VoteAnswerHandler)
+	v1.POST("/answers/:answer_id/collect", middlewares.JWTAuthMiddleware(), controller.CollectAnswerHandler)
+	v1.DELETE("/answers/:answer_id/collect", middlewares.JWTAuthMiddleware(), controller.UncollectAnswerHandler)
+	v1.GET("/answers/:answer_id/interactions", controller.GetAnswerInteractionsHandler)
+	v1.POST("/questions/:id/follow", middlewares.JWTAuthMiddleware(), controller.FollowQuestionHandler)
+	v1.DELETE("/questions/:id/follow", middlewares.JWTAuthMiddleware(), controller.UnfollowQuestionHandler)
+	v1.GET("/questions/:id/interactions", controller.GetQuestionInteractionsHandler)
+
+	// 评论相关路由
+	v1.POST("/comments", middlewares.JWTAuthMiddleware(), controller.CreateCommentHandler)
+	v1.GET("/comments", controller.ListCommentsHandler)
+
+	// 通知相关路由
+	v1.GET("/notifications", middlewares.JWTAuthMiddleware(), controller.ListNotificationsHandler)
+	v1.GET("/notifications/unread-count", middlewares.JWTAuthMiddleware(), controller.UnreadCountHandler)
+	v1.POST("/notifications/read-all", middlewares.JWTAuthMiddleware(), controller.MarkAllNotificationsReadHandler)
+
+	// 用户主页路由
+	v1.GET("/users/:id", controller.GetUserProfileHandler)
+	v1.GET("/users/:id/questions", controller.ListUserQuestionsHandler)
+	v1.GET("/users/:id/answers", controller.ListUserAnswersHandler)
+
+	// 话题相关路由
+	v1.GET("/topics", controller.ListTopicsHandler)
+	v1.POST("/topics", middlewares.JWTAuthMiddleware(), controller.CreateTopicHandler)
+	v1.GET("/topics/:id", controller.GetTopicHandler)
+	v1.POST("/topics/:id/follow", middlewares.JWTAuthMiddleware(), controller.FollowTopicHandler)
+	v1.DELETE("/topics/:id/follow", middlewares.JWTAuthMiddleware(), controller.UnfollowTopicHandler)
 	//jwt中间件
 	v1.GET("/ping", middlewares.JWTAuthMiddleware(), func(c *gin.Context) {
 		//如果是已经登录的用户，判断请求头中是否携带了token

@@ -183,3 +183,36 @@ func GetUserDetailByID(id int64) (user *models.User, err error) {
 	}
 	return user, nil
 }
+
+// CountUserQuestions 用户提问数
+func CountUserQuestions(userID int64) (int, error) {
+	var n int
+	err := db.Get(&n, "SELECT COUNT(question_id) FROM question WHERE author_id = ? AND status = 1", userID)
+	return n, err
+}
+
+// CountUserAnswers 用户回答数
+func CountUserAnswers(userID int64) (int, error) {
+	var n int
+	err := db.Get(&n, "SELECT COUNT(answer_id) FROM answer WHERE author_id = ? AND status = 1", userID)
+	return n, err
+}
+
+// ListUserQuestions 用户的提问列表（最新优先）
+func ListUserQuestions(userID int64, limit int) (questions []*models.Question, err error) {
+	questions = make([]*models.Question, 0, limit)
+	err = db.Select(&questions, `SELECT question_id, title, description, author_id, answer_count,
+		comment_count, follower_count, view_count, status, create_time
+		FROM question WHERE author_id = ? AND status = 1 ORDER BY create_time DESC LIMIT ?`, userID, limit)
+	return
+}
+
+// ListUserAnswers 用户的回答列表（带所属问题标题）
+func ListUserAnswers(userID int64, limit int) (answers []*models.ApiAnswerDetail, err error) {
+	answers = make([]*models.ApiAnswerDetail, 0, limit)
+	err = db.Select(&answers, `SELECT a.answer_id, a.question_id, a.author_id, a.content, a.vote_count,
+		a.comment_count, a.collect_count, a.status, a.create_time, qu.title AS question_title
+		FROM answer a JOIN question qu ON qu.question_id = a.question_id
+		WHERE a.author_id = ? AND a.status = 1 ORDER BY a.create_time DESC LIMIT ?`, userID, limit)
+	return
+}

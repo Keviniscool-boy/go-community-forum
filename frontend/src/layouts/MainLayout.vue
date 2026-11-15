@@ -2,7 +2,7 @@
 // 主布局：顶部导航 + 左侧导航 + 中间内容 + 右侧边栏
 // 移动端（<768px）隐藏两侧栏，Feed 单列显示
 import { ref } from 'vue'
-import { HomeFilled, EditPen } from '@element-plus/icons-vue'
+import { HomeFilled, EditPen, Compass, TrendCharts } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import TopNav from '@/components/TopNav.vue'
 
@@ -20,6 +20,12 @@ const isMobileSidebarVisible = ref(false)
           <router-link class="side-link" to="/">
             <el-icon><HomeFilled /></el-icon><span>首页</span>
           </router-link>
+          <router-link class="side-link" to="/discover">
+            <el-icon><Compass /></el-icon><span>发现</span>
+          </router-link>
+          <router-link class="side-link" to="/hot">
+            <el-icon><TrendCharts /></el-icon><span>热榜</span>
+          </router-link>
           <router-link class="side-link" to="/questions/ask">
             <el-icon><EditPen /></el-icon><span>提问</span>
           </router-link>
@@ -34,11 +40,14 @@ const isMobileSidebarVisible = ref(false)
         <router-view />
       </main>
 
-      <!-- 右侧边栏（桌面端）：热榜占位，M5 接入 -->
+      <!-- 右侧边栏（桌面端）：热门话题 -->
       <aside class="right-sidebar">
         <div class="bb-card right-block">
-          <div class="right-block-title">热榜</div>
-          <div class="right-block-empty">热榜即将上线</div>
+          <div class="right-block-title">发现</div>
+          <div class="right-block-links">
+            <router-link class="right-link" to="/discover">热门话题</router-link>
+            <router-link class="right-link" to="/hot">热榜内容</router-link>
+          </div>
         </div>
       </aside>
     </div>
@@ -121,10 +130,22 @@ const isMobileSidebarVisible = ref(false)
   border-bottom: 1px solid var(--bb-border);
 }
 
-.right-block-empty {
-  color: var(--bb-text-tertiary);
-  font-size: 13px;
-  padding-top: 12px;
+.right-block-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.right-link {
+  padding: 8px 4px;
+  font-size: 14px;
+  color: var(--bb-text-secondary);
+  border-radius: 4px;
+
+  &:hover {
+    color: var(--bb-primary);
+    background: var(--bb-bg-page);
+  }
 }
 
 // 移动端：隐藏两侧栏

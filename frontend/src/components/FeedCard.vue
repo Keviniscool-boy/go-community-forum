@@ -1,24 +1,38 @@
 <script setup lang="ts">
-// Feed 内容卡片：标题、作者/社区、摘要、互动操作
-import { ChatDotRound, Star, CaretTop } from '@element-plus/icons-vue'
-import type { PostDetail } from '@/types/api'
+// Feed 内容卡片：标题、作者/话题、摘要、互动数据
+import { ChatDotRound, Star, CaretTop, View } from '@element-plus/icons-vue'
+import type { FeedItem } from '@/api/feed'
 
-defineProps<{ post: PostDetail }>()
+defineProps<{ item: FeedItem }>()
+
+// 条目链接：回答跳问题详情，问题跳问题详情
+function itemLink(item: FeedItem): string {
+  return item.item_type === 'answer' ? `/questions/${item.question_id}` : `/questions/${item.item_id}`
+}
 </script>
 
 <template>
   <article class="feed-card bb-card">
-    <router-link class="card-title" :to="`/post/${post.id}`">{{ post.title }}</router-link>
+    <router-link class="card-title" :to="itemLink(item)">{{ item.title }}</router-link>
     <div class="card-meta">
-      <span class="meta-author">{{ post.author_name }}</span>
-      <span v-if="post.name" class="meta-community">发表于「{{ post.name }}」</span>
-      <span class="meta-time">{{ post.create_time?.slice(0, 10) }}</span>
+      <router-link class="meta-author" :to="`/users/${item.author.user_id}`">{{ item.author.username }}</router-link>
+      <span v-if="item.item_type === 'answer'" class="meta-type">回答了问题</span>
+      <el-tag v-if="item.topic" size="small" effect="plain" class="meta-topic">{{ item.topic.name }}</el-tag>
+      <span class="meta-time">{{ item.create_time?.slice(0, 10) }}</span>
     </div>
-    <p class="card-excerpt">{{ post.content }}</p>
+    <p class="card-excerpt">{{ item.excerpt }}</p>
     <div class="card-actions">
-      <span class="action-item"><el-icon><ChatDotRound /></el-icon>评论</span>
-      <span class="action-item"><el-icon><Star /></el-icon>收藏</span>
-      <span class="action-item"><el-icon><CaretTop /></el-icon>赞同</span>
+      <span v-if="item.item_type === 'answer'" class="action-item">
+        <el-icon><CaretTop /></el-icon>{{ item.stats.vote_count }} 赞同
+      </span>
+      <span v-if="item.item_type === 'answer'" class="action-item">
+        <el-icon><Star /></el-icon>{{ item.stats.collect_count }} 收藏
+      </span>
+      <span v-if="item.item_type === 'question'" class="action-item">
+        {{ item.stats.answer_count || 0 }} 回答
+      </span>
+      <span class="action-item"><el-icon><ChatDotRound /></el-icon>{{ item.stats.comment_count }} 评论</span>
+      <span class="action-item"><el-icon><View /></el-icon>浏览</span>
     </div>
   </article>
 </template>
@@ -42,10 +56,24 @@ defineProps<{ post: PostDetail }>()
 
 .card-meta {
   display: flex;
+  align-items: center;
   gap: 12px;
   margin-top: 6px;
   font-size: 13px;
   color: var(--bb-text-tertiary);
+}
+
+.meta-author {
+  color: var(--bb-text-secondary);
+  font-weight: 500;
+
+  &:hover {
+    color: var(--bb-primary);
+  }
+}
+
+.meta-topic {
+  border-radius: 4px;
 }
 
 .card-excerpt {
@@ -72,10 +100,5 @@ defineProps<{ post: PostDetail }>()
   gap: 4px;
   font-size: 13px;
   color: var(--bb-text-tertiary);
-  cursor: pointer;
-
-  &:hover {
-    color: var(--bb-primary);
-  }
 }
 </style>

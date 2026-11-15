@@ -13,8 +13,11 @@ const router = createRouter({
         { path: 'questions/ask', name: 'ask-question', component: () => import('@/views/AskQuestionView.vue'), meta: { title: '提问', requiresAuth: true } },
         { path: 'questions/:id', name: 'question-detail', component: () => import('@/views/QuestionDetailView.vue'), meta: { title: '问题详情' } },
         { path: 'ask', redirect: { name: 'ask-question' } },
-        // M5 上线的页面，先占位
-        { path: 'users/:id', name: 'user-profile', component: () => import('@/views/PlaceholderView.vue'), meta: { title: '用户主页' } },
+        { path: 'hot', name: 'hot', component: () => import('@/views/HomeView.vue'), meta: { title: '热榜' } },
+        { path: 'discover', name: 'discover', component: () => import('@/views/DiscoverView.vue'), meta: { title: '发现' } },
+        { path: 'topics/:id', name: 'topic', component: () => import('@/views/TopicView.vue'), meta: { title: '话题详情' } },
+        { path: 'users/:id', name: 'user-profile', component: () => import('@/views/UserProfileView.vue'), meta: { title: '用户主页' } },
+        { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { title: '通知', requiresAuth: true } },
       ],
     },
     {
