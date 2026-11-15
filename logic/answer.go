@@ -48,8 +48,9 @@ func CreateQuestion(p *models.ParamCreateQuestion, authorID int64) (questionID i
 }
 
 // GetQuestionDetail 问题详情（含作者名、话题），同时自增浏览量
-func GetQuestionDetail(id int64) (data *models.ApiQuestionDetail, err error) {
-	q, err := mysql.GetQuestionByID(id)
+// viewerID 为当前登录用户（游客 0）；author_only 内容仅作者本人可见
+func GetQuestionDetail(id int64, viewerID int64) (data *models.ApiQuestionDetail, err error) {
+	q, err := mysql.GetQuestionPublicByID(id, viewerID)
 	if err != nil {
 		if errors.Is(err, mysql.ErrQuestionNotExist) {
 			return nil, ErrQuestionNotExist

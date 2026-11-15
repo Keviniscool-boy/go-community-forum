@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -93,6 +95,20 @@ func main() {
 	if err := controller.InitTrans("zh"); err != nil {
 		fmt.Printf("controller.InitTrans() failed, err:%v\n", err)
 		return
+	}
+
+	// 6.1 管理员初始账号：admin.user_ids（逗号分隔雪花 ID）在启动时同步角色
+	for _, idStr := range viper.GetStringSlice("admin.user_ids") {
+		if idStr == "" {
+			continue
+		}
+		if id, err := strconv.ParseInt(strings.TrimSpace(idStr), 10, 64); err == nil && id > 0 {
+			if err := mysql.SetUserRole(id, "admin"); err != nil {
+				fmt.Printf("set admin role for %s failed: %v\n", idStr, err)
+			} else {
+				zap.L().Info("admin role synced", zap.Int64("user_id", id))
+			}
+		}
 	}
 
 	// 7.注册路由

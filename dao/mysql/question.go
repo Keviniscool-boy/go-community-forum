@@ -36,7 +36,7 @@ func CreateQuestion(q *models.Question, topicIDs []int64) error {
 	return tx.Commit()
 }
 
-// GetQuestionByID 根据问题id查询问题详情
+// GetQuestionByID 内部用途：只校验 status=1（创建回答校验、审核后台等）
 func GetQuestionByID(id int64) (q *models.Question, err error) {
 	q = new(models.Question)
 	sqlStr := `SELECT question_id, title, description, author_id, answer_count,
@@ -45,6 +45,25 @@ func GetQuestionByID(id int64) (q *models.Question, err error) {
 	if err = db.Get(q, sqlStr, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			zap.L().Warn("question not found", zap.Int64("id", id))
+			return nil, ErrQuestionNotExist
+		}
+		return nil, err
+	}
+	return q, nil
+}
+
+// GetQuestionPublicByID 公开详情：统一治理可见条件；author_only 内容仅作者本人可见
+// viewerID 为当前登录用户（游客传 0）
+func GetQuestionPublicByID(id int64, viewerID int64) (q *models.Question, err error) {
+	q = new(models.Question)
+	sqlStr := `SELECT q.question_id, q.title, q.description, q.author_id, q.answer_count,
+		      q.comment_count, q.follower_count, q.view_count, q.status, q.create_time
+		      FROM question q JOIN user u ON u.user_id = q.author_id AND u.status = 1
+		      WHERE q.question_id = ? AND q.status = 1
+		      AND q.moderation_status = 1 AND q.deleted_at IS NULL
+		      AND (q.visibility = 1 OR (q.visibility = 2 AND q.author_id = ?))`
+	if err = db.Get(q, sqlStr, id, viewerID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrQuestionNotExist
 		}
 		return nil, err

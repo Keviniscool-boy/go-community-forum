@@ -25,18 +25,24 @@ type FeedRow struct {
 }
 
 // feedUnionSQL 问题 + 回答的 UNION 查询主体（whereConds 按别名列拼接）
+// 公开可见条件统一为：status=1 AND moderation_status=1 AND visibility=1 AND deleted_at IS NULL
+// 且作者账号未被禁用；Feed 只展示公开状态内容（规格 3.3）
 const feedUnionSQL = `(SELECT 'question' AS item_type, q.question_id AS item_id, q.question_id AS question_id,
 		q.author_id AS author_id, q.title AS title, q.description AS excerpt_src,
 		q.answer_count AS answer_count, 0 AS vote_count, q.comment_count AS comment_count, 0 AS collect_count,
 		q.create_time AS create_time
-	FROM question q WHERE q.status = 1 AND %s)
+	FROM question q JOIN user q_author ON q_author.user_id = q.author_id AND q_author.status = 1
+	WHERE q.status = 1 AND q.moderation_status = 1 AND q.visibility = 1 AND q.deleted_at IS NULL AND %s)
 UNION ALL
 (SELECT 'answer' AS item_type, a.answer_id AS item_id, a.question_id AS question_id,
 		a.author_id AS author_id, qu.title AS title, a.content AS excerpt_src,
 		0 AS answer_count, a.vote_count AS vote_count, a.comment_count AS comment_count, a.collect_count AS collect_count,
 		a.create_time AS create_time
-	FROM answer a JOIN question qu ON qu.question_id = a.question_id AND qu.status = 1
-	WHERE a.status = 1 AND %s)`
+	FROM answer a
+	JOIN question qu ON qu.question_id = a.question_id AND qu.status = 1
+		AND qu.moderation_status = 1 AND qu.visibility = 1 AND qu.deleted_at IS NULL
+	JOIN user a_author ON a_author.user_id = a.author_id AND a_author.status = 1
+	WHERE a.status = 1 AND a.moderation_status = 1 AND a.visibility = 1 AND a.deleted_at IS NULL AND %s)`
 
 // int64sToArgs []int64 转 []interface{}
 func int64sToArgs(ids []int64) []interface{} {

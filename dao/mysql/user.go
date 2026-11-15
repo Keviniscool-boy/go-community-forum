@@ -142,7 +142,7 @@ func CreateEmailUser(user *models.User) error {
 // GetUserByEmail 根据邮箱查询用户（不存在返回 sql.ErrNoRows）
 func GetUserByEmail(email string) (user *models.User, err error) {
 	user = new(models.User)
-	sqlStr := "SELECT user_id, username, email, email_verified, password, avatar_url, bio, status, token_version FROM user WHERE email = ?"
+	sqlStr := "SELECT user_id, username, email, email_verified, password, avatar_url, bio, status, role, token_version FROM user WHERE email = ?"
 	if err = db.Get(user, sqlStr, email); err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func UpdateLastLogin(userID int64) error {
 // GetUserDetailByID 查询用户完整信息（供 /auth/me 使用）
 func GetUserDetailByID(id int64) (user *models.User, err error) {
 	user = new(models.User)
-	sqlStr := "SELECT user_id, username, email, email_verified, avatar_url, bio, status FROM user WHERE user_id = ?"
+	sqlStr := "SELECT user_id, username, email, email_verified, avatar_url, bio, status, role FROM user WHERE user_id = ?"
 	if err = db.Get(user, sqlStr, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrUserNotExist

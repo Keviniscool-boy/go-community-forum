@@ -59,7 +59,7 @@ func GetQuestionDetailHandler(c *gin.Context) {
 		ResponseError(c, CodeInvalidParams)
 		return
 	}
-	data, err := logic.GetQuestionDetail(id)
+	data, err := logic.GetQuestionDetail(id, tryGetUserID(c))
 	if err != nil {
 		zap.L().Error("logic.GetQuestionDetail failed", zap.Error(err))
 		if errors.Is(err, logic.ErrQuestionNotExist) {

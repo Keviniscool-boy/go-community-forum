@@ -17,7 +17,7 @@ import (
 
 func Setup() *gin.Engine {
 	r := gin.New()
-	r.Use(logger.GinLogger(), logger.GinRecovery(true), middlewares.RateLimitMiddleware(2*time.Second, 100)) // 限流中间件，2秒钟最多处理100个请求
+	r.Use(middlewares.RequestIDMiddleware(), logger.GinLogger(), logger.GinRecovery(true), middlewares.RateLimitMiddleware(2*time.Second, 100)) // 请求追踪 + 限流
 
 	r.GET("/", func(c *gin.Context) {
 		c.String(http.StatusOK, "OK")
@@ -46,7 +46,7 @@ func Setup() *gin.Engine {
 
 	// 问答相关路由
 	v1.POST("/questions", middlewares.JWTAuthMiddleware(), controller.CreateQuestionHandler)
-	v1.GET("/questions/:id", controller.GetQuestionDetailHandler)
+	v1.GET("/questions/:id", middlewares.OptionalAuthMiddleware(), controller.GetQuestionDetailHandler)
 	v1.POST("/questions/:id/answers", middlewares.JWTAuthMiddleware(), controller.CreateAnswerHandler)
 	v1.GET("/questions/:id/answers", controller.ListAnswersHandler)
 
@@ -112,6 +112,8 @@ func Setup() *gin.Engine {
 	// 健康检查：存活与就绪分离，就绪检查依赖与迁移版本
 	r.GET("/healthz", controller.HealthzHandler)
 	r.GET("/readyz", controller.ReadyzHandler)
+	r.GET("/health/live", controller.HealthzHandler)
+	r.GET("/health/ready", controller.ReadyzHandler)
 
 	// pprof 与 Swagger 仅在非生产模式注册（生产环境暴露有安全风险）
 	if viper.GetString("app.mode") != "prod" {
