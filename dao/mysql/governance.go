@@ -183,3 +183,79 @@ func logAdminAction(actorID int64, action, targetType, targetID, requestID strin
 		zap.L().Error("create audit log failed", zap.Error(err), zap.String("action", action))
 	}
 }
+
+// LoadSensitiveWords 加载启用的敏感词与词表版本（version = MAX(version)）
+func LoadSensitiveWords() (words []struct {
+	Word string
+	Type int32
+}, ver int64, err error) {
+	err = db.Get(&ver, "SELECT COALESCE(MAX(version), 0) FROM sensitive_word WHERE enabled = 1")
+	if err != nil {
+		return nil, 0, err
+	}
+	rows := []struct {
+		Word string `db:"word"`
+		Type int32  `db:"word_type"`
+	}{}
+	if err = db.Select(&rows, "SELECT word, word_type FROM sensitive_word WHERE enabled = 1"); err != nil {
+		return nil, 0, err
+	}
+	for _, r := range rows {
+		words = append(words, struct {
+			Word string
+			Type int32
+		}{r.Word, r.Type})
+	}
+	return words, ver, nil
+}
+
+// AddSensitiveWord 新增敏感词并递增版本
+func AddSensitiveWord(word string, wordType int32, createdBy int64) error {
+	_, err := db.Exec(
+		"INSERT INTO sensitive_word (word, word_type, created_by) VALUES (?, ?, ?) "+
+			"ON DUPLICATE KEY UPDATE word_type = VALUES(word_type), enabled = 1, version = version + 1",
+		word, wordType, createdBy)
+	return err
+}
+
+// RemoveSensitiveWord 删除敏感词并递增版本
+func RemoveSensitiveWord(word string) error {
+	_, err := db.Exec("DELETE FROM sensitive_word WHERE word = ?", word)
+	return err
+}
+
+// ListSensitiveWords 词表（管理员视图）
+func ListSensitiveWords() (rows []struct {
+	Word    string  `db:"word"`
+	Type    int32   `db:"word_type"`
+	Enabled bool    `db:"enabled"`
+	Version int64   `db:"version"`
+}, err error) {
+	err = db.Select(&rows, "SELECT word, word_type, enabled, version FROM sensitive_word ORDER BY id DESC LIMIT 500")
+	return
+}
+
+// CountTable 表行数（指标用）
+func CountTable(table string) (int64, error) {
+	var n int64
+	// 白名单防注入
+	switch table {
+	case "user", "question", "answer", "comment", "report", "audit_log", "topic", "draft":
+	default:
+		return 0, ErrInvalidParams
+	}
+	err := db.Get(&n, "SELECT COUNT(*) FROM "+table)
+	return n, err
+}
+
+// CountTableWhere 条件计数
+func CountTableWhere(table, where string) (int64, error) {
+	var n int64
+	switch table {
+	case "user", "question", "answer", "comment", "report", "audit_log", "topic", "draft":
+	default:
+		return 0, ErrInvalidParams
+	}
+	err := db.Get(&n, "SELECT COUNT(*) FROM "+table+" WHERE "+where)
+	return n, err
+}

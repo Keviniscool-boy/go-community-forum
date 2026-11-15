@@ -12,8 +12,8 @@ import (
 
 var ErrAnswerNotExist = errors.New("回答不存在")
 
-// CreateAnswer 创建回答并同步累加问题的回答数（同一事务）
-func CreateAnswer(a *models.Answer) error {
+// CreateAnswer 创建回答并同步累加问题的回答数（同一事务；moderationStatus 由发布审核流决定）
+func CreateAnswer(a *models.Answer, moderationStatus int32) error {
 	tx, err := db.Beginx()
 	if err != nil {
 		return err
@@ -21,8 +21,8 @@ func CreateAnswer(a *models.Answer) error {
 	defer tx.Rollback()
 
 	if _, err = tx.Exec(
-		"INSERT INTO answer (answer_id, question_id, author_id, content) VALUES (?, ?, ?, ?)",
-		a.ID, a.QuestionID, a.AuthorID, a.Content); err != nil {
+		"INSERT INTO answer (answer_id, question_id, author_id, content, moderation_status) VALUES (?, ?, ?, ?, ?)",
+		a.ID, a.QuestionID, a.AuthorID, a.Content, moderationStatus); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(

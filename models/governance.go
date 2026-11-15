@@ -94,3 +94,19 @@ type AuditLog struct {
 	Metadata   string    `json:"metadata" db:"metadata_json"`
 	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 }
+
+// ---------- Swagger 文档用具体分页类型 ----------
+
+// ReportPage 举报队列分页
+type ReportPage struct {
+	Items      []*ApiReportDetail `json:"items"`
+	NextCursor string             `json:"next_cursor"`
+	HasMore    bool               `json:"has_more"`
+}
+
+// AuditLogPage 审计日志分页
+type AuditLogPage struct {
+	Items      []*AuditLog `json:"items"`
+	NextCursor string      `json:"next_cursor"`
+	HasMore    bool        `json:"has_more"`
+}

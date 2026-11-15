@@ -13,18 +13,26 @@ func TestFollowingFeedPagination(t *testing.T) {
 	fullName := createTempDB(t, root, "following")
 	switchToTempDB(t, fullName)
 	// 独立库，建 question/answer 最小结构（与迁移链列一致的可空性由 DEFAULT 兜底）
+	mustExec(t, `CREATE TABLE user (
+		id bigint NOT NULL AUTO_INCREMENT, user_id bigint NOT NULL, username varchar(64) NOT NULL,
+		email varchar(255) NOT NULL, status tinyint NOT NULL DEFAULT 1, role varchar(16) NOT NULL DEFAULT 'user',
+		PRIMARY KEY (id), UNIQUE KEY uk_user_id (user_id)) ENGINE=InnoDB`)
 	mustExec(t, `CREATE TABLE question (
 		id bigint NOT NULL AUTO_INCREMENT, question_id bigint NOT NULL,
 		title varchar(200) NOT NULL, description text NOT NULL, author_id bigint NOT NULL,
 		answer_count int NOT NULL DEFAULT 0, comment_count int NOT NULL DEFAULT 0,
 		follower_count int NOT NULL DEFAULT 0, view_count int NOT NULL DEFAULT 0,
-		status tinyint NOT NULL DEFAULT 1, create_time timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+		status tinyint NOT NULL DEFAULT 1, moderation_status tinyint NOT NULL DEFAULT 1,
+		visibility tinyint NOT NULL DEFAULT 1, deleted_at timestamp NULL DEFAULT NULL,
+		create_time timestamp NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY (id), UNIQUE KEY uk_question_id (question_id)) ENGINE=InnoDB`)
 	mustExec(t, `CREATE TABLE answer (
 		id bigint NOT NULL AUTO_INCREMENT, answer_id bigint NOT NULL,
 		question_id bigint NOT NULL, author_id bigint NOT NULL, content mediumtext NOT NULL,
 		vote_count int NOT NULL DEFAULT 0, comment_count int NOT NULL DEFAULT 0,
 		collect_count int NOT NULL DEFAULT 0, status tinyint NOT NULL DEFAULT 1,
+		moderation_status tinyint NOT NULL DEFAULT 1, visibility tinyint NOT NULL DEFAULT 1,
+		deleted_at timestamp NULL DEFAULT NULL,
 		create_time timestamp NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY (id), UNIQUE KEY uk_answer_id (answer_id)) ENGINE=InnoDB`)
 	t.Cleanup(func() {
@@ -36,6 +44,7 @@ func TestFollowingFeedPagination(t *testing.T) {
 	// 时间交错：每两条同秒（验证 tie-breaker）
 	authorA, authorB, outsider := int64(1), int64(2), int64(999)
 	base := time.Now().Add(-time.Hour)
+	mustExec(t, "INSERT INTO user (user_id, username, email) VALUES (?, 'a', 'a@t'), (?, 'b', 'b@t'), (?, 'o', 'o@t')", authorA, authorB, outsider)
 	mustExec(t, "INSERT INTO question (question_id, title, author_id, description, create_time) VALUES (9000, 'q', ?, '', ?)", authorA, base)
 	for i := 0; i < 10; i++ {
 		author := authorA

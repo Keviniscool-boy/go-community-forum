@@ -7,6 +7,7 @@ import (
 	_ "bluebell/docs"
 	"bluebell/logger"
 	"bluebell/middlewares"
+	"bluebell/models"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -83,6 +84,25 @@ func Setup() *gin.Engine {
 	v1.GET("/users/:id", controller.GetUserProfileHandler)
 	v1.GET("/users/:id/questions", controller.ListUserQuestionsHandler)
 	v1.GET("/users/:id/answers", controller.ListUserAnswersHandler)
+
+	// 举报（登录用户）
+	v1.POST("/reports", middlewares.JWTAuthMiddleware(), controller.CreateReportHandler)
+
+	// 管理后台（moderator/admin；封禁与配置仅 admin）
+	adminGroup := v1.Group("/admin")
+	adminGroup.Use(middlewares.JWTAuthMiddleware(), middlewares.RequireRoleMiddleware(models.RoleModerator, models.RoleAdmin))
+	{
+		adminGroup.GET("/reports", controller.ListReportsHandler)
+		adminGroup.POST("/reports/:id/resolve", controller.ResolveReportHandler)
+		adminGroup.POST("/content/:type/:id/:action", controller.ModerateContentHandler)
+		adminGroup.GET("/audit-logs", controller.ListAuditLogsHandler)
+		adminGroup.GET("/metrics/overview", controller.AdminMetricsHandler)
+	}
+	adminOnly := v1.Group("/admin")
+	adminOnly.Use(middlewares.JWTAuthMiddleware(), middlewares.RequireRoleMiddleware(models.RoleAdmin))
+	{
+		adminOnly.POST("/users/:id/disable", controller.AdminSetUserStatusHandler)
+	}
 
 	// 话题相关路由
 	v1.GET("/topics", controller.ListTopicsHandler)

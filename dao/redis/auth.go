@@ -159,3 +159,17 @@ func InvalidateAuthCode(email, purpose string) {
 	ctx := context.Background()
 	rdb.Del(ctx, getRedisKey(keyAuthCodePrefix+purpose+":"+email))
 }
+
+// IncrReportLimit 举报频次计数（每小时窗口），返回当前计数
+func IncrReportLimit(userID int64) (int64, error) {
+	ctx := context.Background()
+	key := getRedisKey(fmt.Sprintf("report:limit:%d", userID))
+	cnt, err := rdb.Incr(ctx, key).Result()
+	if err != nil {
+		return 0, err
+	}
+	if cnt == 1 {
+		rdb.Expire(ctx, key, time.Hour)
+	}
+	return cnt, nil
+}

@@ -41,7 +41,12 @@ func CreateQuestion(p *models.ParamCreateQuestion, authorID int64) (questionID i
 		Description: p.Description,
 		AuthorID:    authorID,
 	}
-	if err = mysql.CreateQuestion(q, topicIDs); err != nil {
+	// 发布审核流（规格 7.1）：参数校验 -> 敏感词检查 -> 决定审核状态
+	decision, err := CheckContentModeration(p.Title, p.Description)
+	if err != nil {
+		return 0, err
+	}
+	if err = mysql.CreateQuestion(q, topicIDs, decision.Status); err != nil {
 		return 0, err
 	}
 	return q.ID, nil
@@ -94,7 +99,11 @@ func CreateAnswer(questionID int64, p *models.ParamCreateAnswer, authorID int64)
 		AuthorID:   authorID,
 		Content:    p.Content,
 	}
-	if err = mysql.CreateAnswer(a); err != nil {
+	decision, err := CheckContentModeration(p.Content)
+	if err != nil {
+		return 0, err
+	}
+	if err = mysql.CreateAnswer(a, decision.Status); err != nil {
 		return 0, err
 	}
 	return a.ID, nil

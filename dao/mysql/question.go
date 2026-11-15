@@ -12,8 +12,8 @@ import (
 
 var ErrQuestionNotExist = errors.New("问题不存在")
 
-// CreateQuestion 创建问题及话题关联
-func CreateQuestion(q *models.Question, topicIDs []int64) error {
+// CreateQuestion 创建问题及话题关联（moderationStatus 由发布审核流决定）
+func CreateQuestion(q *models.Question, topicIDs []int64, moderationStatus int32) error {
 	// 问题和关联表在同个事务内写入，保证不出现半截数据
 	tx, err := db.Beginx()
 	if err != nil {
@@ -22,8 +22,8 @@ func CreateQuestion(q *models.Question, topicIDs []int64) error {
 	defer tx.Rollback()
 
 	if _, err = tx.Exec(
-		"INSERT INTO question (question_id, title, description, author_id) VALUES (?, ?, ?, ?)",
-		q.ID, q.Title, q.Description, q.AuthorID); err != nil {
+		"INSERT INTO question (question_id, title, description, author_id, moderation_status) VALUES (?, ?, ?, ?, ?)",
+		q.ID, q.Title, q.Description, q.AuthorID, moderationStatus); err != nil {
 		return err
 	}
 	for _, tid := range topicIDs {
