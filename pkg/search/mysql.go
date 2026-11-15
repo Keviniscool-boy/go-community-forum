@@ -30,6 +30,7 @@ type scopedRow struct {
 // 公开可见条件片段
 const (
 	questionVisible = `q.status = 1 AND q.moderation_status = 1 AND q.visibility = 1 AND q.deleted_at IS NULL`
+	questionVisibleByQu = `qu.status = 1 AND qu.moderation_status = 1 AND qu.visibility = 1 AND qu.deleted_at IS NULL`
 	answerVisible   = `a.status = 1 AND a.moderation_status = 1 AND a.visibility = 1 AND a.deleted_at IS NULL`
 )
 
@@ -80,8 +81,10 @@ func (m *MySQLFallback) Search(ctx context.Context, q Query) (Result, error) {
 			LEFT(a.content, 200) AS excerpt, a.author_id AS author_id,
 			(CASE WHEN a.content LIKE ? THEN 1 ELSE 0 END + CASE WHEN qu.title LIKE ? THEN 2 ELSE 0 END) AS score,
 			UNIX_TIMESTAMP(a.create_time) AS create_time
-			FROM answer a JOIN question qu ON qu.question_id = a.question_id AND %s JOIN user u ON u.user_id = a.author_id AND u.status = 1
-			WHERE %s AND a.content LIKE ? LIMIT %d)`, questionVisible, answerVisible, perScopeLimit)
+			FROM answer a
+			JOIN question qu ON qu.question_id = a.question_id AND %s
+			JOIN user u ON u.user_id = a.author_id AND u.status = 1
+			WHERE %s AND a.content LIKE ? LIMIT %d)`, questionVisibleByQu, answerVisible, perScopeLimit)
 		union += " UNION ALL "
 	}
 	if contains(selected, "user") {

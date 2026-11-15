@@ -43,6 +43,31 @@ Bluebell 是一个前后端分离的社区论坛项目，最初作为 Go Web 开
 - 话题列表、话题详情与话题下的问题
 - 提问时可关联话题
 
+### 治理与安全（第三阶段）
+
+- 内容治理状态机：moderation_status（pending/approved/rejected/quarantined）+ visibility + 软删除，统一公开可见条件覆盖 Feed/详情/搜索/评论
+- 发布审核流：敏感词检查（词表存 DB + 缓存版本失效），拒绝词进人工队列、普通词隔离
+- 举报：同用户同目标幂等 + 每小时限流；管理员审核队列（乐观锁防并发覆盖，举报成立内容隔离下架）
+- 角色权限：user/moderator/admin，角色每次查库即时生效；管理员初始账号通过 admin.user_ids 配置
+- 审计日志：只追加，记录管理员动作与 request_id
+
+### 搜索
+
+- 统一搜索（问题/回答/用户/话题），scope/sort/cursor 分页；只返回公开可见内容
+- SearchIndex 接口抽象：开发环境 MySQL fallback，生产可接 Elasticsearch 适配器
+
+### 媒体与编辑
+
+- 图片上传：类型白名单（魔数检测，禁 SVG）、5/10MB 限制、解码炸弹防护、sha256 去重、media_asset 资产表
+- 安全 Markdown 子集：服务端清洗（白名单标签、https URL），原始 HTML/脚本不可能输出
+- 草稿箱：自动保存带版本乐观锁，发布重新过审核流
+
+### 产品化
+
+- 收藏夹（默认"我的收藏"）、浏览历史（可清空）、目标删除显示"内容已不可用"
+- 推荐事件埋点（曝光/点击/停留等，client event_id 幂等）与推荐规则版本
+- Request ID 贯穿日志与审计；/healthz /readyz 与 /health/live /health/ready 就绪探针
+
 ### 社区
 
 - 社区列表与详情查询
@@ -131,6 +156,11 @@ Bluebell 是一个前后端分离的社区论坛项目，最初作为 Go Web 开
 - **备份**：`docker exec go-community-forum-mysql8019-1 mysqldump -uroot -p$MYSQL_ROOT_PASSWORD bluebell > backup.sql`。
 - **恢复**：先建空库再导入备份，服务启动时迁移链会补齐缺失的结构变更。
 - **重复执行安全**：迁移按版本记录跳过已应用项，服务重启不会重复执行。
+
+### 管理后台
+
+- 管理员初始账号：`.env` 配置 `ADMIN_USER_IDS=<雪花ID>`（逗号分隔），启动时同步角色
+- 管理后台入口 `/admin`（侧栏仅管理员/审核员可见）：指标总览、举报队列、内容审核、用户禁用/启用、审计日志
 
 ### 旧接口兼容说明
 

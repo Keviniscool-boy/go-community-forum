@@ -99,7 +99,7 @@ func Login(user *models.User) (err error) {
 // GetUserByID 根据用户id查询用户信息
 func GetUserByID(id int64) (user *models.User, err error) {
 	user = new(models.User)
-	sqlStr := "SELECT user_id, username FROM user WHERE user_id = ?"
+	sqlStr := "SELECT user_id, username, role FROM user WHERE user_id = ?"
 	if err = db.Get(user, sqlStr, id); err != nil {
 		return nil, err
 	}

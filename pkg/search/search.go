@@ -34,19 +34,19 @@ type Query struct {
 // ResultItem 结果条目
 type ResultItem struct {
 	DocumentType string  `json:"document_type"`
-	DocumentID   string  `json:"document_id,string"`
+	DocumentID   string  `json:"document_id"` // 已是字符串，不加 ,string（避免双重引号）
 	Title        string  `json:"title"`
 	Excerpt      string  `json:"excerpt"`
-	AuthorID     string  `json:"author_id,string,omitempty"`
+	AuthorID     string  `json:"author_id,omitempty"`
 	Popularity   float64 `json:"-"`
 	CreatedAt    int64   `json:"create_time"`
 }
 
 // Result 搜索结果（cursor 由实现生成）
 type Result struct {
-	Items      []ResultItem
-	NextCursor string
-	HasMore    bool
+	Items      []ResultItem `json:"items"`
+	NextCursor string       `json:"next_cursor"`
+	HasMore    bool         `json:"has_more"`
 }
 
 // SearchIndex 搜索索引接口（规格 6.2）
