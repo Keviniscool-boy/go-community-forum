@@ -30,8 +30,8 @@ onMounted(() => {
 onBeforeUnmount(() => notification.stopPolling())
 
 function onSearch() {
-  // 搜索接口后续接入，先提示
-  if (keyword.value.trim()) ElMessage.info('搜索功能即将上线')
+  const q = keyword.value.trim()
+  if (q) router.push({ path: '/search', query: { q } })
 }
 
 function onBellClick() {

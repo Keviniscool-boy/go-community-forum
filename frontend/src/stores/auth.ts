@@ -47,12 +47,13 @@ export const useAuthStore = defineStore('auth', {
       const res = await registerByEmail(data)
       this.setLogin(res.token, res.user)
     },
-    // 拉取当前用户信息（登录状态恢复时调用）
+    // 拉取当前用户信息（登录状态恢复时调用；不把 localStorage 当已认证）
     async restoreMe() {
       if (!this.token) return
       try {
         const user = await fetchMe()
         this.setUser(user)
+        if (user.role) localStorage.setItem('bb_role', user.role)
       } catch {
         // token 失效时响应拦截器已清除登录态
       }

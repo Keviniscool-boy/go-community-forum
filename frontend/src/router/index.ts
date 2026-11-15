@@ -19,6 +19,12 @@ const router = createRouter({
         { path: 'users/:id', name: 'user-profile', component: () => import('@/views/UserProfileView.vue'), meta: { title: '用户主页' } },
         { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { title: '通知', requiresAuth: true } },
         { path: 'settings/profile', name: 'settings-profile', component: () => import('@/views/SettingsProfileView.vue'), meta: { title: '个人资料', requiresAuth: true } },
+        { path: 'settings/security', name: 'settings-security', component: () => import('@/views/SettingsSecurityView.vue'), meta: { title: '账号安全', requiresAuth: true } },
+        { path: 'search', name: 'search', component: () => import('@/views/SearchView.vue'), meta: { title: '搜索' } },
+        { path: 'drafts', name: 'drafts', component: () => import('@/views/DraftsView.vue'), meta: { title: '草稿箱', requiresAuth: true } },
+        { path: 'bookmarks', name: 'bookmarks', component: () => import('@/views/BookmarksView.vue'), meta: { title: '收藏夹', requiresAuth: true } },
+        { path: 'history', name: 'history', component: () => import('@/views/HistoryView.vue'), meta: { title: '浏览历史', requiresAuth: true } },
+        { path: 'admin', name: 'admin', component: () => import('@/views/AdminView.vue'), meta: { title: '管理后台', requiresAuth: true } },
       ],
     },
     {

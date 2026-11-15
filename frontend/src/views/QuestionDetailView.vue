@@ -7,6 +7,8 @@ import { View as ViewIcon, CaretTop, Star, ChatDotRound } from '@element-plus/ic
 import { fetchQuestionDetail, fetchAnswers, createAnswer, updateQuestion, deleteQuestion, updateAnswer, deleteAnswer, type QuestionDetail, type AnswerDetail } from '@/api/question'
 import { voteAnswer, collectAnswer, uncollectAnswer, followQuestion, unfollowQuestion, fetchQuestionInteractions, fetchAnswerInteractions, fetchComments, createComment, type CommentDetail } from '@/api/interaction'
 import { followUser, unfollowUser } from '@/api/interaction'
+import { addBookmarkItem, listFolders, createFolder, type BookmarkFolder } from '@/api/productivity'
+import { createReport } from '@/api/productivity'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/api/http'
 import LoadingState from '@/components/LoadingState.vue'
@@ -191,6 +193,63 @@ async function loadAnswers(reset = false) {
     answersError.value = e instanceof Error ? e.message : '加载失败'
   } finally {
     answersLoading.value = false
+  }
+}
+
+// 举报对话框
+const reportVisible = ref(false)
+const reportReason = ref<'spam' | 'abuse' | 'copyright' | 'unsafe' | 'other'>('spam')
+const reportDesc = ref('')
+const reportSubmitting = ref(false)
+
+function openReport() {
+  if (!auth.isLoggedIn) {
+    router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  reportVisible.value = true
+}
+
+async function submitReport() {
+  reportSubmitting.value = true
+  try {
+    await createReport({
+      target_type: 'question',
+      target_id: questionId,
+      reason_code: reportReason.value,
+      description: reportDesc.value.trim(),
+    })
+    ElMessage.success('举报已提交，我们会尽快处理')
+    reportVisible.value = false
+    reportDesc.value = ''
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    reportSubmitting.value = false
+  }
+}
+
+// 收藏到收藏夹（默认"我的收藏"）
+const bookmarkLoading = ref(false)
+async function onBookmark() {
+  if (!auth.isLoggedIn) {
+    router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  bookmarkLoading.value = true
+  try {
+    const folders = (await listFolders()) || []
+    let folder: BookmarkFolder | undefined = folders.find((f) => f.name === '我的收藏')
+    if (!folder) {
+      const created = await createFolder('我的收藏')
+      folder = { folder_id: created.folder_id, name: '我的收藏', is_private: true }
+    }
+    await addBookmarkItem(folder.folder_id, 'question', questionId)
+    ElMessage.success('已收藏')
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    bookmarkLoading.value = false
   }
 }
 
@@ -381,6 +440,8 @@ onMounted(() => {
             <el-button size="small" plain @click="openEditQuestion">编辑</el-button>
             <el-button size="small" plain type="danger" @click="onDeleteQuestion">删除</el-button>
           </template>
+          <el-button size="small" plain :loading="bookmarkLoading" @click="onBookmark">收藏</el-button>
+          <el-button size="small" plain type="warning" @click="openReport">举报</el-button>
         </div>
         <el-dialog v-model="editDialogVisible" title="编辑问题" width="90%" style="max-width: 640px">
           <el-form label-position="top">
@@ -397,6 +458,28 @@ onMounted(() => {
           </template>
         </el-dialog>
       </article>
+
+      <!-- 举报对话框 -->
+      <el-dialog v-model="reportVisible" title="举报问题" width="90%" style="max-width: 480px">
+        <el-form label-position="top">
+          <el-form-item label="举报原因">
+            <el-select v-model="reportReason" style="width: 100%">
+              <el-option label="垃圾营销" value="spam" />
+              <el-option label="辱骂攻击" value="abuse" />
+              <el-option label="侵权" value="copyright" />
+              <el-option label="不安全内容" value="unsafe" />
+              <el-option label="其他" value="other" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="补充说明（可选）">
+            <el-input v-model="reportDesc" type="textarea" :rows="3" maxlength="1000" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="reportVisible = false">取消</el-button>
+          <el-button type="primary" :loading="reportSubmitting" @click="submitReport">提交举报</el-button>
+        </template>
+      </el-dialog>
 
       <!-- 回答区 -->
       <div class="answers-header">
