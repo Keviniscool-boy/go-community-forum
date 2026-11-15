@@ -30,6 +30,14 @@ type ParamEmailLogin struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// ParamResetPassword 找回密码请求（验证码 purpose=reset_password）
+type ParamResetPassword struct {
+	Email      string `json:"email" binding:"required,email"`
+	Code       string `json:"code" binding:"required,len=6"`
+	Password   string `json:"password" binding:"required,min=8,max=64"`
+	RePassword string `json:"re_password" binding:"required,eqfield=Password"`
+}
+
 // AuthUser 登录/注册成功后返回的用户信息
 type AuthUser struct {
 	UserID    string `json:"user_id"`

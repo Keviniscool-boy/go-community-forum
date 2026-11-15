@@ -47,6 +47,8 @@ async function onSubmit() {
     <div class="auth-footer">
       还没有账号？
       <router-link class="link" to="/register">注册</router-link>
+      <span class="divider">·</span>
+      <router-link class="link" to="/forgot-password">找回密码</router-link>
     </div>
   </div>
 </template>

@@ -32,14 +32,11 @@ func SendCodeHandler(c *gin.Context) {
 	if err := logic.SendCode(p.Email, p.Purpose, ip); err != nil {
 		zap.L().Error("logic.SendCode failed", zap.Error(err))
 		switch {
-		case errors.Is(err, logic.ErrEmailExist):
-			ResponseError(c, CodeEmailExist)
-		case errors.Is(err, logic.ErrEmailNotFound):
-			ResponseError(c, CodeEmailNotExist)
 		case errors.Is(err, redis.ErrCodeSendTooFrequent), errors.Is(err, redis.ErrCodeSendIPLimited):
 			ResponseError(c, CodeSendTooFrequent)
 		default:
-			ResponseError(c, CodeServerBusy)
+			// 其余（含邮件发送失败、Redis 故障）统一为"发送失败"，不区分具体原因
+			ResponseError(c, CodeSendCodeFailed)
 		}
 		return
 	}
@@ -65,12 +62,13 @@ func RegisterHandler(c *gin.Context) {
 	if err != nil {
 		zap.L().Error("logic.RegisterByEmail failed", zap.Error(err))
 		switch {
-		case errors.Is(err, logic.ErrEmailExist):
-			ResponseError(c, CodeEmailExist)
-		case errors.Is(err, logic.ErrUserExist):
-			ResponseError(c, CodeUserExist)
+		case errors.Is(err, logic.ErrRegisterConflict):
+			// 邮箱或用户名冲突统一为模糊错误，不暴露具体原因（防枚举）
+			ResponseError(c, CodeRegisterFailed)
 		case errors.Is(err, redis.ErrVerifyCodeInvalid):
 			ResponseError(c, CodeVerifyCodeInvalid)
+		case errors.Is(err, redis.ErrVerifyCodeLocked):
+			ResponseError(c, CodeVerifyCodeLocked)
 		default:
 			ResponseError(c, CodeServerBusy)
 		}
@@ -137,8 +135,39 @@ func MeHandler(c *gin.Context) {
 	ResponseSuccess(c, user)
 }
 
+// ResetPasswordHandler 找回密码
+// @Summary 找回密码
+// @Description 使用 reset_password 验证码重置密码；成功后所有旧会话（旧 JWT）立即失效。
+// @Description 统一响应：无论邮箱是否存在，验证码正确即返回成功，防止账号枚举
+// @Tags 认证相关接口
+// @Accept json
+// @Produce json
+// @Param object body models.ParamResetPassword true "重置参数"
+// @Success 200 {object} controller.Response
+// @Router /auth/reset-password [post]
+func ResetPasswordHandler(c *gin.Context) {
+	p := new(models.ParamResetPassword)
+	if err := c.ShouldBindJSON(p); err != nil {
+		ResponseErrorWithMsg(c, CodeInvalidParams, Translate(err))
+		return
+	}
+	if err := logic.ResetPassword(p); err != nil {
+		zap.L().Error("logic.ResetPassword failed", zap.Error(err))
+		switch {
+		case errors.Is(err, redis.ErrVerifyCodeInvalid):
+			ResponseError(c, CodeVerifyCodeInvalid)
+		case errors.Is(err, redis.ErrVerifyCodeLocked):
+			ResponseError(c, CodeVerifyCodeLocked)
+		default:
+			ResponseError(c, CodeServerBusy)
+		}
+		return
+	}
+	ResponseSuccess(c, nil)
+}
+
 // AuthResponse 登录/注册成功响应体
 type AuthResponse struct {
-	Token string            `json:"token"`
-	User  *models.AuthUser  `json:"user"`
+	Token string           `json:"token"`
+	User  *models.AuthUser `json:"user"`
 }

@@ -26,6 +26,7 @@ const router = createRouter({
       children: [
         { path: 'login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { title: '登录', authPage: true } },
         { path: 'register', name: 'register', component: () => import('@/views/RegisterView.vue'), meta: { title: '注册', authPage: true } },
+        { path: 'forgot-password', name: 'forgot-password', component: () => import('@/views/ForgotPasswordView.vue'), meta: { title: '找回密码', authPage: true } },
       ],
     },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue'), meta: { title: '页面不存在' } },

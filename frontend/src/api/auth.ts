@@ -41,3 +41,13 @@ export function signupByUsername(username: string, password: string, rePassword:
 export function fetchMe() {
   return http.get<UserInfo>('auth/me')
 }
+
+// 找回密码（验证码 purpose=reset_password）
+export function resetPassword(data: {
+  email: string
+  code: string
+  password: string
+  re_password: string
+}) {
+  return http.post<null>('auth/reset-password', data)
+}

@@ -20,13 +20,14 @@ func signingSecret() ([]byte, error) {
 }
 
 type MyClaims struct {
-	UserId   int64  `json:"user_id"`
-	UserName string `json:"user_name"`
+	UserId       int64  `json:"user_id"`
+	UserName     string `json:"user_name"`
+	TokenVersion int    `json:"token_version"` // 与 user.token_version 一致，密码重置后旧 token 全部失效
 	jwt.StandardClaims
 }
 
 // GenToken 生成JWT
-func GenToken(userId int64, userName string) (string, error) {
+func GenToken(userId int64, userName string, tokenVersion int) (string, error) {
 	secret, err := signingSecret()
 	if err != nil {
 		return "", err
@@ -34,8 +35,9 @@ func GenToken(userId int64, userName string) (string, error) {
 
 	//创建一个我们自己的声明
 	c := MyClaims{
-		UserId:   userId,
-		UserName: userName,
+		UserId:       userId,
+		UserName:     userName,
+		TokenVersion: tokenVersion,
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: time.Now().Add(TokenExpireDuration).Unix(), //过期时间
 			Issuer:    "bluebell",                                 //签发人

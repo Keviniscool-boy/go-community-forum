@@ -36,6 +36,7 @@ func Setup() *gin.Engine {
 	auth.POST("/send-code", controller.SendCodeHandler)
 	auth.POST("/register", controller.RegisterHandler)
 	auth.POST("/login", controller.EmailLoginHandler)
+	auth.POST("/reset-password", controller.ResetPasswordHandler)
 	auth.GET("/me", middlewares.JWTAuthMiddleware(), controller.MeHandler)
 
 	// 问答相关路由

@@ -13,5 +13,6 @@ type User struct {
 	AvatarURL    string    `json:"avatar_url" db:"avatar_url"`
 	Bio          string    `json:"bio" db:"bio"`
 	Status       int32     `json:"status" db:"status"`
+	TokenVersion int       `json:"-" db:"token_version"`
 	LastLoginAt  time.Time `json:"last_login_at" db:"last_login_at"`
 }

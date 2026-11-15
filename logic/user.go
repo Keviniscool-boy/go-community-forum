@@ -65,7 +65,7 @@ func Login(p *models.ParamLogin) (token string, err error) {
 		}
 		return "", err
 	}
-	//生成jwt
-	return jwt.GenToken(user.UserID, user.Username)
+	//生成jwt（携带 token_version，密码重置后旧 token 失效）
+	return jwt.GenToken(user.UserID, user.Username, user.TokenVersion)
 
 }

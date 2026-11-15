@@ -28,6 +28,10 @@ const (
 	CodeQuestionNotExist
 	CodeAnswerNotExist
 	CodeTopicExist
+
+	CodeRegisterFailed
+	CodeSendCodeFailed
+	CodeVerifyCodeLocked
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -52,6 +56,9 @@ var codeMsgMap = map[ResCode]string{
 	CodeQuestionNotExist:   "问题不存在",
 	CodeAnswerNotExist:     "回答不存在",
 	CodeTopicExist:         "话题已存在",
+	CodeRegisterFailed:     "注册失败，请检查填写信息或验证码",
+	CodeSendCodeFailed:     "验证码发送失败，请稍后重试",
+	CodeVerifyCodeLocked:   "错误次数过多，请重新获取验证码",
 }
 
 // 创建一个函数，传入code返回msg

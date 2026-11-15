@@ -3,6 +3,7 @@ package mysql
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"bluebell/models"
 
@@ -14,6 +15,7 @@ var (
 	ErrInvalidCredentials = errors.New("用户名或密码错误")
 	ErrUserExist          = errors.New("用户已存在")
 	ErrUserNotExist       = errors.New("用户不存在")
+	ErrAccountBanned      = errors.New("账号已被禁用")
 )
 
 // CheckUserExist 根据用户名查询用户是否存在
@@ -32,22 +34,19 @@ func CheckUserExist(username string) (bool, error) {
 	return count > 0, nil
 }
 
-// InsertUser 向数据库中插入一条用户记录
-// InsertUser 向数据库中插入一条用户记录
-// 该函数会对传入的 `user.Password` 进行 bcrypt 哈希后再存储到数据库
-// 参数:
-//   - user: 待插入的用户对象，`User.Password` 为明文密码（函数会替换为哈希值写入）
-//
-// 返回:
-//   - error: 插入过程中的错误，成功时为 nil
+// InsertUser 向数据库中插入一条用户记录（旧用户名注册接口使用）
+// 该函数会对传入的 `user.Password` 进行 bcrypt 哈希后再存储到数据库；
+// 旧接口没有邮箱，写入 user_id 派生的占位邮箱（placeholder.invalid 为 RFC 2606 保留 TLD），
+// email_verified 保持默认 0，占位邮箱不能作为登录邮箱
 func InsertUser(user *models.User) error {
-	sqlStr := "INSERT INTO user (user_id, username, password) VALUES (?, ?, ?)"
+	sqlStr := "INSERT INTO user (user_id, username, email, password) VALUES (?, ?, ?, ?)"
 	// 对密码进行哈希再存储
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(sqlStr, user.UserID, user.Username, string(hashedPassword))
+	_, err = db.Exec(sqlStr, user.UserID, user.Username,
+		fmt.Sprintf("legacy_%d@placeholder.invalid", user.UserID), string(hashedPassword))
 	if err != nil {
 		// 并发注册同名用户时可能撞唯一索引 idx_username（MySQL 错误码 1062），映射为业务错误
 		var mysqlErr *mysql.MySQLError
@@ -72,12 +71,16 @@ func InsertUser(user *models.User) error {
 //   - error: 查询或校验过程中发生的错误（密码错误时也会返回错误）
 func Login(user *models.User) (err error) {
 	oPassword := user.Password
-	sqlStr := "SELECT user_id, username, password FROM user WHERE username = ?"
+	sqlStr := "SELECT user_id, username, password, token_version, status FROM user WHERE username = ?"
 	if err = db.Get(user, sqlStr, user.Username); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrInvalidCredentials
 		}
 		return err
+	}
+	// 禁用账号统一拒绝
+	if user.Status == 0 {
+		return ErrAccountBanned
 	}
 	// 判断密码是否正确（user.Password 为数据库中读取的哈希）
 	if err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(oPassword)); err != nil {
@@ -136,7 +139,7 @@ func CreateEmailUser(user *models.User) error {
 // GetUserByEmail 根据邮箱查询用户（不存在返回 sql.ErrNoRows）
 func GetUserByEmail(email string) (user *models.User, err error) {
 	user = new(models.User)
-	sqlStr := "SELECT user_id, username, email, email_verified, password, avatar_url, bio, status FROM user WHERE email = ?"
+	sqlStr := "SELECT user_id, username, email, email_verified, password, avatar_url, bio, status, token_version FROM user WHERE email = ?"
 	if err = db.Get(user, sqlStr, email); err != nil {
 		return nil, err
 	}
@@ -182,6 +185,30 @@ func GetUserDetailByID(id int64) (user *models.User, err error) {
 		return nil, err
 	}
 	return user, nil
+}
+
+// GetUserTokenVersion 查询用户的 JWT 版本号（中间件校验用）
+func GetUserTokenVersion(userID int64) (int, error) {
+	var v int
+	err := db.Get(&v, "SELECT token_version FROM user WHERE user_id = ?", userID)
+	return v, err
+}
+
+// UpdatePasswordByEmail 重置密码并使所有旧会话失效（token_version +1）
+// 返回是否实际更新（邮箱不存在时 affected=0，调用方做统一响应，不泄露存在性）
+func UpdatePasswordByEmail(email, plainPassword string) (bool, error) {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(plainPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return false, err
+	}
+	result, err := db.Exec(
+		"UPDATE user SET password = ?, token_version = token_version + 1 WHERE email = ? AND email_verified = 1",
+		string(hashed), email)
+	if err != nil {
+		return false, err
+	}
+	n, _ := result.RowsAffected()
+	return n > 0, nil
 }
 
 // CountUserQuestions 用户提问数
