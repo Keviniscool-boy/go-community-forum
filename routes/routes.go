@@ -30,6 +30,13 @@ func Setup() *gin.Engine {
 	v1.POST("/signup", controller.SignUpHandler)
 	// 登录路由
 	v1.POST("/login", controller.LoginHandler)
+
+	// 邮箱认证相关路由（新前端统一使用 /auth/*，旧 /signup /login 迁移期保留兼容）
+	auth := v1.Group("/auth")
+	auth.POST("/send-code", controller.SendCodeHandler)
+	auth.POST("/register", controller.RegisterHandler)
+	auth.POST("/login", controller.EmailLoginHandler)
+	auth.GET("/me", middlewares.JWTAuthMiddleware(), controller.MeHandler)
 	//jwt中间件
 	v1.GET("/ping", middlewares.JWTAuthMiddleware(), func(c *gin.Context) {
 		//如果是已经登录的用户，判断请求头中是否携带了token

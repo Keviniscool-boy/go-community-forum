@@ -13,6 +13,7 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("用户名或密码错误")
 	ErrUserExist          = errors.New("用户已存在")
+	ErrUserNotExist       = errors.New("用户不存在")
 )
 
 // CheckUserExist 根据用户名查询用户是否存在
@@ -94,6 +95,90 @@ func GetUserByID(id int64) (user *models.User, err error) {
 	user = new(models.User)
 	sqlStr := "SELECT user_id, username FROM user WHERE user_id = ?"
 	if err = db.Get(user, sqlStr, id); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// CheckEmailExist 查询邮箱是否已被注册
+func CheckEmailExist(email string) (bool, error) {
+	sqlStr := "SELECT COUNT(user_id) FROM user WHERE email = ?"
+	var count int
+	if err := db.Get(&count, sqlStr, email); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// CheckUsernameExist 查询用户名是否已被占用
+func CheckUsernameExist(username string) (bool, error) {
+	return CheckUserExist(username)
+}
+
+// CreateEmailUser 创建邮箱注册用户（密码 bcrypt 哈希后存储，邮箱视为已验证）
+func CreateEmailUser(user *models.User) error {
+	sqlStr := "INSERT INTO user (user_id, username, email, email_verified, password) VALUES (?, ?, ?, 1, ?)"
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(sqlStr, user.UserID, user.Username, user.Email, string(hashedPassword))
+	if err != nil {
+		// 撞唯一索引（邮箱或用户名已存在），映射为业务错误
+		var mysqlErr *mysql.MySQLError
+		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+			return ErrUserExist
+		}
+	}
+	return err
+}
+
+// GetUserByEmail 根据邮箱查询用户（不存在返回 sql.ErrNoRows）
+func GetUserByEmail(email string) (user *models.User, err error) {
+	user = new(models.User)
+	sqlStr := "SELECT user_id, username, email, email_verified, password, avatar_url, bio, status FROM user WHERE email = ?"
+	if err = db.Get(user, sqlStr, email); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// LoginByEmail 邮箱密码登录校验：按邮箱取用户并比对 bcrypt 哈希
+func LoginByEmail(user *models.User) error {
+	oPassword := user.Password
+	u, err := GetUserByEmail(user.Email)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrInvalidCredentials
+		}
+		return err
+	}
+	if err = bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(oPassword)); err != nil {
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			return ErrInvalidCredentials
+		}
+		return err
+	}
+	// 把查到的用户信息回填，供 logic 层生成 token 使用
+	*user = *u
+	return nil
+}
+
+// UpdateLastLogin 更新最后登录时间
+func UpdateLastLogin(userID int64) error {
+	sqlStr := "UPDATE user SET last_login_at = NOW() WHERE user_id = ?"
+	_, err := db.Exec(sqlStr, userID)
+	return err
+}
+
+// GetUserDetailByID 查询用户完整信息（供 /auth/me 使用）
+func GetUserDetailByID(id int64) (user *models.User, err error) {
+	user = new(models.User)
+	sqlStr := "SELECT user_id, username, email, email_verified, avatar_url, bio, status FROM user WHERE user_id = ?"
+	if err = db.Get(user, sqlStr, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotExist
+		}
 		return nil, err
 	}
 	return user, nil

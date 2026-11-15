@@ -24,3 +24,11 @@ snowflake:
   machine_id: 1
 jwt:
   secret: ""
+# 邮件配置通过环境变量注入（MAIL_HOST / MAIL_PORT / MAIL_USERNAME / MAIL_PASSWORD / MAIL_FROM / MAIL_TLS）
+mail:
+  host: ""
+  port: 465
+  username: ""
+  password: ""
+  from: ""
+  tls: true

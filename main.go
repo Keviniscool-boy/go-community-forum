@@ -13,6 +13,7 @@ import (
 	"bluebell/dao/mysql"
 	"bluebell/dao/redis"
 	"bluebell/logger"
+	"bluebell/pkg/mail"
 	"bluebell/pkg/snowflake"
 	"bluebell/routes"
 	"bluebell/settings"
@@ -67,6 +68,12 @@ func main() {
 		return
 	}
 	defer redis.Close()
+
+	// 5.初始化邮件服务
+	if err := mail.Init(); err != nil {
+		fmt.Printf("mail.Init() failed, err:%v\n", err)
+		return
+	}
 
 	// 5.初始化雪花算法
 	if err := snowflake.Init(settings.Conf.Snowflake.StartTime, settings.Conf.Snowflake.MachineID); err != nil {

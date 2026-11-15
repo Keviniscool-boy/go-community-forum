@@ -24,3 +24,10 @@ snowflake:
   machine_id: 1
 jwt:
   secret: "replace-with-at-least-32-random-characters"
+mail:
+  host: "smtp.example.com"      # SMTP 服务器
+  port: 465                     # 465 走隐式 TLS，587 走 STARTTLS
+  username: "noreply@example.com"
+  password: "replace-with-your-smtp-password"  # 不要提交真实密码，生产通过 .env 注入
+  from: "noreply@example.com"
+  tls: true

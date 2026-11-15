@@ -24,6 +24,12 @@ services:
     environment:
       MYSQL_PASSWORD: "${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}"
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET in .env}"
+      MAIL_HOST: "${MAIL_HOST:-}"
+      MAIL_PORT: "${MAIL_PORT:-465}"
+      MAIL_USERNAME: "${MAIL_USERNAME:-}"
+      MAIL_PASSWORD: "${MAIL_PASSWORD:-}"
+      MAIL_FROM: "${MAIL_FROM:-}"
+      MAIL_TLS: "${MAIL_TLS:-true}"
     command: ./wait-for.sh mysql8019:3306 redis507:6379 -- ./bluebell_app
     depends_on:
       - mysql8019

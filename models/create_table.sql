@@ -1,16 +1,22 @@
-CREATE TABLE `user` ( 
-    
-    `id` bigint(20) NOT NULL AUTO_INCREMENT, 
-    `username` varchar(64) COLLATE utf8mb4_general_ci NOT NULL , 
-    `email` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL UNIQUE, 
-    `password` varchar(64) COLLATE utf8mb4_general_ci NOT NULL, 
+CREATE TABLE `user` (
+
+    `id` bigint(20) NOT NULL AUTO_INCREMENT,
+    `username` varchar(64) COLLATE utf8mb4_general_ci NOT NULL ,
+    `email` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+    `email_verified` tinyint(4) NOT NULL DEFAULT 0 COMMENT '邮箱是否已验证',
+    `password` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,
     `user_id` bigint(20) NOT NULL,
     `gender` tinyint(4) NOT NULL DEFAULT 0,
-    `create_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP, 
-    `update_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, 
+    `avatar_url` varchar(500) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '头像地址',
+    `bio` varchar(500) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '' COMMENT '个人简介',
+    `status` tinyint(4) NOT NULL DEFAULT 1 COMMENT '账号状态 1 正常 0 禁用',
+    `last_login_at` timestamp NULL DEFAULT NULL COMMENT '最后登录时间',
+    `create_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+    `update_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `idx_username` (`username`) USING BTREE,
-    UNIQUE KEY `idx_user_id` (`user_id`) USING BTREE
+    UNIQUE KEY `idx_user_id` (`user_id`) USING BTREE,
+    UNIQUE KEY `uk_user_email` (`email`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `community` (

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { loginByUsername, signupByUsername } from '@/api/auth'
+import { loginByEmail, registerByEmail, fetchMe, type AuthResult } from '@/api/auth'
 import type { UserInfo } from '@/types/api'
 
 const TOKEN_KEY = 'bb_token'
@@ -31,12 +31,31 @@ export const useAuthStore = defineStore('auth', {
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem(USER_KEY)
     },
-    async login(username: string, password: string) {
-      const { token } = await loginByUsername(username, password)
-      this.setLogin(token)
+    // 邮箱密码登录
+    async login(email: string, password: string) {
+      const res: AuthResult = await loginByEmail(email, password)
+      this.setLogin(res.token, res.user)
     },
-    async signup(username: string, password: string, rePassword: string) {
-      await signupByUsername(username, password, rePassword)
+    // 邮箱验证码注册（注册成功直接登录）
+    async register(data: {
+      email: string
+      code: string
+      username: string
+      password: string
+      re_password: string
+    }) {
+      const res = await registerByEmail(data)
+      this.setLogin(res.token, res.user)
+    },
+    // 拉取当前用户信息（登录状态恢复时调用）
+    async restoreMe() {
+      if (!this.token) return
+      try {
+        const user = await fetchMe()
+        this.setUser(user)
+      } catch {
+        // token 失效时响应拦截器已清除登录态
+      }
     },
     logout() {
       this.clear()

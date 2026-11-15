@@ -18,6 +18,12 @@ const (
 
 	CodeVoteTimeExpire
 	CodeRepeatedVote
+
+	CodeEmailExist
+	CodeEmailNotExist
+	CodeSendTooFrequent
+	CodeVerifyCodeInvalid
+	CodeAccountBanned
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -34,6 +40,11 @@ var codeMsgMap = map[ResCode]string{
 	CodeNeedLogin:          "需要登录",
 	CodeVoteTimeExpire:     "投票时间已过",
 	CodeRepeatedVote:       "请勿重复投票",
+	CodeEmailExist:         "邮箱已被注册",
+	CodeEmailNotExist:      "该邮箱尚未注册",
+	CodeSendTooFrequent:    "发送过于频繁，请稍后再试",
+	CodeVerifyCodeInvalid:  "验证码错误或已过期",
+	CodeAccountBanned:      "账号已被禁用",
 }
 
 // 创建一个函数，传入code返回msg
