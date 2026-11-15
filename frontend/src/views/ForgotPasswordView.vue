@@ -1,16 +1,19 @@
 <script setup lang="ts">
-// 找回密码：邮箱验证码重置；成功后旧会话全部失效，需用新密码重新登录
-import { ref, onBeforeUnmount } from 'vue'
+// 找回密码（两段式）：第一步验证码换一次性重置凭据，第二步凭据设置新密码
+// 完成后所有旧会话失效，需用新密码重新登录
+import { ref, onBeforeUnmount, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Message as MessageIcon, Lock } from '@element-plus/icons-vue'
-import { sendAuthCode, resetPassword } from '@/api/auth'
+import { Message as MessageIcon, Lock, Key } from '@element-plus/icons-vue'
+import { sendAuthCode, verifyResetCode, resetPasswordWithToken } from '@/api/auth'
 import { ApiError } from '@/api/http'
 
 const router = useRouter()
 
+const step = ref<1 | 2>(1)
 const email = ref('')
 const code = ref('')
+const resetToken = ref('')
 const password = ref('')
 const rePassword = ref('')
 const submitting = ref(false)
@@ -19,6 +22,7 @@ const countdown = ref(0)
 let timer: ReturnType<typeof setInterval> | null = null
 
 const emailValid = () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value)
+const expiresText = computed(() => '重置凭据已就绪（10 分钟内有效）')
 
 async function onSendCode() {
   if (!emailValid()) return ElMessage.warning('请输入正确的邮箱地址')
@@ -42,16 +46,31 @@ async function onSendCode() {
   }
 }
 
-async function onSubmit() {
+// 第一步：验证码换取一次性重置凭据（明文凭据只在本次响应返回）
+async function onVerify() {
   if (!emailValid()) return ElMessage.warning('请输入正确的邮箱地址')
   if (!code.value) return ElMessage.warning('请输入验证码')
+  submitting.value = true
+  try {
+    const res = await verifyResetCode(email.value.trim(), code.value.trim())
+    resetToken.value = res.reset_token
+    step.value = 2
+    ElMessage.success('验证通过，请设置新密码')
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    submitting.value = false
+  }
+}
+
+// 第二步：凭据单次消费，改密并撤销所有旧会话
+async function onReset() {
   if (password.value.length < 8) return ElMessage.warning('密码至少 8 位')
   if (password.value !== rePassword.value) return ElMessage.warning('两次密码不一致')
   submitting.value = true
   try {
-    await resetPassword({
-      email: email.value.trim(),
-      code: code.value.trim(),
+    await resetPasswordWithToken({
+      reset_token: resetToken.value,
       password: password.value,
       re_password: rePassword.value,
     })
@@ -72,7 +91,13 @@ onBeforeUnmount(() => {
 <template>
   <div>
     <h2 class="auth-title">找回密码</h2>
-    <el-form @submit.prevent="onSubmit">
+
+    <el-steps v-if="step === 1" :active="0" align-center class="steps">
+      <el-step title="验证身份" />
+      <el-step title="设置新密码" />
+    </el-steps>
+
+    <el-form v-if="step === 1" @submit.prevent="onVerify">
       <el-form-item>
         <div class="code-row">
           <el-input v-model="email" type="email" placeholder="注册邮箱" size="large" :prefix-icon="MessageIcon" />
@@ -82,18 +107,30 @@ onBeforeUnmount(() => {
         </div>
       </el-form-item>
       <el-form-item>
-        <el-input v-model="code" placeholder="6 位验证码" size="large" maxlength="6" />
+        <el-input v-model="code" placeholder="6 位验证码" size="large" maxlength="6" :prefix-icon="Key" @keyup.enter="onVerify" />
       </el-form-item>
+      <el-button type="primary" size="large" style="width: 100%" :loading="submitting" native-type="submit">
+        验证身份
+      </el-button>
+    </el-form>
+
+    <el-form v-else @submit.prevent="onReset">
+      <el-steps :active="1" align-center class="steps">
+        <el-step title="验证身份" />
+        <el-step title="设置新密码" />
+      </el-steps>
+      <p class="reset-hint">{{ expiresText }}</p>
       <el-form-item>
         <el-input v-model="password" type="password" placeholder="新密码（至少 8 位）" size="large" :prefix-icon="Lock" show-password />
       </el-form-item>
       <el-form-item>
-        <el-input v-model="rePassword" type="password" placeholder="确认新密码" size="large" :prefix-icon="Lock" show-password @keyup.enter="onSubmit" />
+        <el-input v-model="rePassword" type="password" placeholder="确认新密码" size="large" :prefix-icon="Lock" show-password @keyup.enter="onReset" />
       </el-form-item>
       <el-button type="primary" size="large" style="width: 100%" :loading="submitting" native-type="submit">
         重置密码
       </el-button>
     </el-form>
+
     <div class="auth-footer">
       想起密码了？
       <router-link class="link" to="/login">返回登录</router-link>
@@ -104,6 +141,17 @@ onBeforeUnmount(() => {
 <style scoped lang="less">
 .auth-title {
   margin: 0 0 20px;
+  text-align: center;
+}
+
+.steps {
+  margin-bottom: 24px;
+}
+
+.reset-hint {
+  margin: 0 0 16px;
+  color: var(--bb-text-secondary);
+  font-size: 13px;
   text-align: center;
 }
 

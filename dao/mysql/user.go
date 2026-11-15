@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"bluebell/models"
 
@@ -16,6 +17,8 @@ var (
 	ErrUserExist          = errors.New("用户已存在")
 	ErrUserNotExist       = errors.New("用户不存在")
 	ErrAccountBanned      = errors.New("账号已被禁用")
+	ErrResetTokenInvalid  = errors.New("重置凭据无效或已过期")
+	ErrEmailTaken         = errors.New("该邮箱已被其他账号使用")
 )
 
 // CheckUserExist 根据用户名查询用户是否存在
@@ -244,8 +247,96 @@ func ListUserAnswers(userID int64, limit int) (answers []*models.ApiAnswerDetail
 	return
 }
 
-// UpdateProfile 更新个人资料（bio / avatar_url）
-func UpdateProfile(userID int64, bio, avatarURL string) error {
-	_, err := db.Exec("UPDATE user SET bio = ?, avatar_url = ? WHERE user_id = ?", bio, avatarURL, userID)
+// UpdateProfile 更新个人资料（username 空串表示不修改）
+func UpdateProfile(userID int64, username, bio, avatarURL string) error {
+	_, err := db.Exec(
+		"UPDATE user SET username = IF(? = '', username, ?), bio = ?, avatar_url = ? WHERE user_id = ?",
+		username, username, bio, avatarURL, userID)
 	return err
+}
+
+// ---------- 两段式密码重置凭据 ----------
+
+// UpsertResetToken 覆盖式写入重置凭据摘要（同一邮箱只保留最新一条有效凭据）
+func UpsertResetToken(email, tokenHash string, expiresAt time.Time) error {
+	_, err := db.Exec(
+		"INSERT INTO password_reset_token (email, token_hash, expires_at) VALUES (?, ?, ?) "+
+			"ON DUPLICATE KEY UPDATE token_hash = VALUES(token_hash), expires_at = VALUES(expires_at), used = 0",
+		email, tokenHash, expiresAt)
+	return err
+}
+
+// ConsumeResetToken 单次消费凭据并改密：used=1、密码更新、token_version+1 同一事务；
+// 凭据不存在/已用/过期返回 ErrResetTokenInvalid；MySQL 更新失败时事务回滚，凭据保持可重试
+func ConsumeResetToken(tokenHash, encodedPasswordHash string) (string, error) {
+	tx, err := db.Beginx()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	var email string
+	err = tx.Get(&email,
+		"SELECT email FROM password_reset_token WHERE token_hash = ? AND used = 0 AND expires_at > UTC_TIMESTAMP()",
+		tokenHash)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrResetTokenInvalid
+		}
+		return "", err
+	}
+	// 单次消费：UPDATE ... WHERE used=0，并发下只有一条语句 RowsAffected>0
+	result, err := tx.Exec(
+		"UPDATE password_reset_token SET used = 1 WHERE token_hash = ? AND used = 0", tokenHash)
+	if err != nil {
+		return "", err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return "", ErrResetTokenInvalid
+	}
+	// email_verified=0（占位邮箱）不允许重置：更新不到用户行视为凭据无效
+	result, err = tx.Exec(
+		"UPDATE user SET password = ?, token_version = token_version + 1 WHERE email = ? AND email_verified = 1",
+		encodedPasswordHash, email)
+	if err != nil {
+		return "", err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return "", ErrResetTokenInvalid
+	}
+	if err = tx.Commit(); err != nil {
+		return "", err
+	}
+	return email, nil
+}
+
+// BindEmail 登录用户绑定已验证邮箱：更新邮箱并标记已验证
+// 并发下邮箱唯一约束兜底；撞索引返回 ErrEmailTaken
+func BindEmail(userID int64, email string) error {
+	_, err := db.Exec(
+		"UPDATE user SET email = ?, email_verified = 1 WHERE user_id = ?", email, userID)
+	if err != nil {
+		var mysqlErr *mysql.MySQLError
+		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+			return ErrEmailTaken
+		}
+	}
+	return err
+}
+
+// IncrementTokenVersion 递增 JWT 版本（logout-all / 改密后撤销所有旧会话）
+// 返回递增后的版本号；并发递增由 SQL 原子保证
+func IncrementTokenVersion(userID int64) (int, error) {
+	result, err := db.Exec("UPDATE user SET token_version = token_version + 1 WHERE user_id = ?", userID)
+	if err != nil {
+		return 0, err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return 0, ErrUserNotExist
+	}
+	var version int
+	if err = db.Get(&version, "SELECT token_version FROM user WHERE user_id = ?", userID); err != nil {
+		return 0, err
+	}
+	return version, err
 }

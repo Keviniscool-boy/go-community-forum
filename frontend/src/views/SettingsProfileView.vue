@@ -8,12 +8,14 @@ import { ApiError } from '@/api/http'
 
 const auth = useAuthStore()
 
+const username = ref('')
 const bio = ref('')
 const avatarUrl = ref('')
 const submitting = ref(false)
 
 onMounted(() => {
   if (!auth.isLoggedIn) return
+  username.value = auth.user?.username || ''
   bio.value = auth.user?.bio || ''
   avatarUrl.value = auth.user?.avatar_url || ''
 })
@@ -22,11 +24,13 @@ async function onSubmit() {
   if (!auth.isLoggedIn) return
   submitting.value = true
   try {
-    await updateProfile({ bio: bio.value.trim(), avatar_url: avatarUrl.value.trim() })
-    // 同步本地用户信息（bio/avatar 不在 AuthUser 返回里，直接改本地）
-    if (auth.user) {
-      auth.setUser({ ...auth.user, bio: bio.value.trim(), avatar_url: avatarUrl.value.trim() } as typeof auth.user)
-    }
+    await updateProfile({
+      username: username.value.trim(),
+      bio: bio.value.trim(),
+      avatar_url: avatarUrl.value.trim(),
+    })
+    // 服务端重新拉取用户信息，保持本地与后端一致
+    await auth.restoreMe()
     ElMessage.success('资料已更新')
   } catch (e) {
     if (e instanceof ApiError) ElMessage.error(e.message)
@@ -40,6 +44,9 @@ async function onSubmit() {
   <div class="settings-view bb-card">
     <h2>个人资料</h2>
     <el-form label-position="top" @submit.prevent="onSubmit">
+      <el-form-item label="用户名（2-32 字符）">
+        <el-input v-model="username" maxlength="32" show-word-limit />
+      </el-form-item>
       <el-form-item label="头像地址（图片 URL）">
         <el-input v-model="avatarUrl" maxlength="500" placeholder="https://…" />
       </el-form-item>

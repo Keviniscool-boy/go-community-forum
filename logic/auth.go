@@ -1,9 +1,15 @@
 package logic
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"strconv"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"bluebell/dao/mysql"
 	"bluebell/dao/redis"
@@ -11,6 +17,8 @@ import (
 	"bluebell/pkg/jwt"
 	"bluebell/pkg/mail"
 	"bluebell/pkg/snowflake"
+
+	"golang.org/x/crypto/bcrypt"
 	"go.uber.org/zap"
 )
 
@@ -24,25 +32,49 @@ var (
 	ErrRegisterConflict = errors.New("注册失败：邮箱或用户名已被使用")
 )
 
-// normalizeEmail 服务端统一规范化：去空白 + 转小写，所有流程（发码/注册/登录/重置）一致
+// normalizeEmail 服务端统一规范化：去除首尾空白；域名转小写；
+// local-part 不做任何供应商特定的转换（保留原样）。
+// MySQL 唯一索引使用 utf8mb4_general_ci（大小写不敏感），与应用比较语义一致
 func normalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
+	email = strings.TrimSpace(email)
+	at := strings.LastIndexByte(email, '@')
+	if at < 0 {
+		return email
+	}
+	return email[:at] + strings.ToLower(email[at:])
+}
+
+// validatePasswordStrength 密码 8-64 字节（UTF-8 字节长度，先于 bcrypt 校验，
+// 避免 bcrypt 72 字节静默截断）；binding 的 min/max 按 rune 计数，这里补字节口径
+func validatePasswordStrength(password string) error {
+	if n := len(password); n < 8 || n > 64 || !utf8.ValidString(password) {
+		return errors.New("密码长度需为 8-64 字节")
+	}
+	return nil
 }
 
 // SendCode 发送邮箱验证码
 // 防枚举：不再预先检查邮箱是否存在，统一发码（注册用不了的码在最终注册时被统一错误拦截）
+// purpose=bind_email 时由路由层强制鉴权，只对已登录用户放行
 func SendCode(rawEmail, purpose, ip string) error {
 	email := normalizeEmail(rawEmail)
 	code, err := redis.SendAuthCode(email, purpose, ip)
 	if err != nil {
 		return err
 	}
-	// 发送邮件失败时验证码仍在 Redis 中保持有效，等待 60s 倒计时后可重发
-	return mail.SendCodeMail(email, code)
+	// 邮件发送失败：立即失效对应验证码，防止无效码残留被重试使用
+	if err = mail.SendCodeMail(email, code); err != nil {
+		redis.InvalidateAuthCode(email, purpose)
+		return err
+	}
+	return nil
 }
 
 // RegisterByEmail 邮箱验证码注册，成功后返回 token 和用户信息
 func RegisterByEmail(p *models.ParamEmailRegister) (token string, user *models.AuthUser, err error) {
+	if err = validatePasswordStrength(p.Password); err != nil {
+		return "", nil, err
+	}
 	email := normalizeEmail(p.Email)
 	// 校验验证码（Lua 原子：比较、消费、失败计数；Redis 故障返回系统错误）
 	if err = redis.VerifyAuthCode(email, models.CodePurposeRegister, p.Code); err != nil {
@@ -111,26 +143,82 @@ func LoginByEmail(p *models.ParamEmailLogin) (token string, user *models.AuthUse
 	return token, toAuthUser(loginUser), nil
 }
 
-// ResetPassword 找回密码：验证一次性重置码 → 更新密码 → token_version+1 撤销旧会话
-// 统一响应：无论邮箱是否存在，验证码正确即返回成功（邮箱不存在时不做任何修改），
-// 避免枚举；占位邮箱（legacy，未验证）不可重置
-func ResetPassword(p *models.ParamResetPassword) error {
+// ---------- 两段式密码重置 ----------
+
+// VerifyResetCode 找回密码第一步：验证码（原子消费）换一次性重置凭据
+// 凭据明文只出现在本次响应；服务端只存 sha256 摘要与过期时间
+func VerifyResetCode(p *models.ParamVerifyResetCode) (resetToken string, expiresIn int, err error) {
 	email := normalizeEmail(p.Email)
-	// 原子校验并消费重置码
-	if err := redis.VerifyAuthCode(email, models.CodePurposeResetPassword, p.Code); err != nil {
+	// 验证码校验：仅 email_verified=1 的真实邮箱用户能收到重置验证码，此处码错误/过期即拒绝
+	if err = redis.VerifyAuthCode(email, models.CodePurposeResetPassword, p.Code); err != nil {
+		return "", 0, err
+	}
+	// 生成 256 位随机凭据
+	raw := make([]byte, 32)
+	if _, err = rand.Read(raw); err != nil {
+		return "", 0, err
+	}
+	resetToken = base64.RawURLEncoding.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(resetToken))
+	tokenHash := hex.EncodeToString(sum[:])
+	expiresAt := time.Now().UTC().Add(models.ResetTokenTTLSeconds * time.Second)
+	if err = mysql.UpsertResetToken(email, tokenHash, expiresAt); err != nil {
+		// 凭据写入失败：验证码已消费，用户需重新获取验证码；错误上抛为服务错误
+		return "", 0, err
+	}
+	return resetToken, models.ResetTokenTTLSeconds, nil
+}
+
+// ResetPasswordWithToken 找回密码第二步：凭据单次消费 + 改密 + 撤销所有旧会话（同事务）
+// 统一响应：凭据无效与邮箱不存在返回同一个模糊错误，防枚举
+func ResetPasswordWithToken(p *models.ParamResetWithToken) error {
+	if err := validatePasswordStrength(p.Password); err != nil {
 		return err
 	}
-	updated, err := mysql.UpdatePasswordByEmail(email, p.Password)
+	sum := sha256.Sum256([]byte(p.ResetToken))
+	tokenHash := hex.EncodeToString(sum[:])
+	// dao 层要求传入 bcrypt 哈希（与其他写入路径一致）
+	hashed, err := bcrypt.GenerateFromPassword([]byte(p.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
-	if updated {
-		// 清除该用户 token 版本缓存，旧 JWT 在下一次受保护请求即失效
-		// 需要查一次 user_id；邮箱不存在时上面 updated=false 已跳过
-		if u, err := mysql.GetUserByEmail(email); err == nil {
-			redis.InvalidateTokenVersionCache(u.UserID)
-		}
+	email, err := mysql.ConsumeResetToken(tokenHash, string(hashed))
+	if err != nil {
+		return err
 	}
+	// 清除该用户 token 版本缓存，旧 JWT 在下一次受保护请求即失效
+	if u, err := mysql.GetUserByEmail(email); err == nil {
+		redis.InvalidateTokenVersionCache(u.UserID)
+	}
+	return nil
+}
+
+// ---------- 邮箱绑定与全局登出 ----------
+
+// BindEmail 旧账号绑定真实邮箱：验证码（bind_email purpose，原子消费）+ 唯一约束兜底
+// 占位邮箱（legacy，未验证）绑定真实邮箱后即完成账号迁移闭环
+func BindEmail(userID int64, p *models.ParamBindEmail) error {
+	email := normalizeEmail(p.Email)
+	if err := redis.VerifyAuthCode(email, models.CodePurposeBindEmail, p.Code); err != nil {
+		return err
+	}
+	if err := mysql.BindEmail(userID, email); err != nil {
+		return err
+	}
+	// 邮箱是身份字段，绑定后撤销所有旧会话（保守做法：重新登录）
+	if _, err := mysql.IncrementTokenVersion(userID); err != nil {
+		return err
+	}
+	redis.InvalidateTokenVersionCache(userID)
+	return nil
+}
+
+// LogoutAll 全部设备登出：递增 token_version 使该用户所有已签发 token 失效
+func LogoutAll(userID int64) error {
+	if _, err := mysql.IncrementTokenVersion(userID); err != nil {
+		return err
+	}
+	redis.InvalidateTokenVersionCache(userID)
 	return nil
 }
 

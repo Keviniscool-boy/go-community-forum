@@ -57,9 +57,9 @@ func TestFollowingFeedPagination(t *testing.T) {
 
 	// 翻页遍历：page size 4，直到取完，比对全集
 	seen := make(map[int64]bool)
-	cursorTime, cursorID, total := time.Time{}, int64(0), 0
+	cursorTime, cursorType, cursorID, total := time.Time{}, "", int64(0), 0
 	for page := 0; page < 10; page++ {
-		rows, err := FollowingFeedPage([]int64{authorA, authorB}, cursorTime, cursorID, 4)
+		rows, err := FollowingFeedPage([]int64{authorA, authorB}, cursorTime, cursorType, cursorID, 4)
 		if err != nil {
 			t.Fatalf("page %d: %v", page, err)
 		}
@@ -75,7 +75,7 @@ func TestFollowingFeedPagination(t *testing.T) {
 			}
 			seen[r.ItemID] = true
 			total++
-			cursorTime, cursorID = r.CreateTime, r.ItemID
+			cursorTime, cursorType, cursorID = r.CreateTime, r.ItemType, r.ItemID
 		}
 		if len(rows) < 4 {
 			break
@@ -87,7 +87,7 @@ func TestFollowingFeedPagination(t *testing.T) {
 	}
 
 	// 排序检查：create_time 降序，同秒内 item_id 严格降序（total order，不漏不重）
-	rows, err := FollowingFeedPage([]int64{authorA, authorB}, time.Time{}, 0, 100)
+	rows, err := FollowingFeedPage([]int64{authorA, authorB}, time.Time{}, "", 0, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,8 +96,15 @@ func TestFollowingFeedPagination(t *testing.T) {
 		if cur.CreateTime.After(prev.CreateTime) {
 			t.Fatal("rows not in descending time order")
 		}
-		if cur.CreateTime.Equal(prev.CreateTime) && cur.ItemID >= prev.ItemID {
-			t.Fatalf("tie-breaker broken: ids %d then %d at same time", prev.ItemID, cur.ItemID)
+		if !cur.CreateTime.Equal(prev.CreateTime) {
+			continue
+		}
+		// 同时间：item_type 降序（question > answer），同类型内 item_id 降序
+		if cur.ItemType > prev.ItemType {
+			t.Fatalf("item_type tie-breaker broken: %s after %s", cur.ItemType, prev.ItemType)
+		}
+		if cur.ItemType == prev.ItemType && cur.ItemID >= prev.ItemID {
+			t.Fatalf("id tie-breaker broken: ids %d then %d at same time and type", prev.ItemID, cur.ItemID)
 		}
 	}
 }

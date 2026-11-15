@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -22,7 +23,7 @@ func Init() error {
 	dbname := viper.GetString("mysql.dbname")
 
 	// 构建 DSN
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=UTC",
 		user, password, host, port, dbname)
 
 	// 连接数据库
@@ -68,4 +69,17 @@ func GetDB() *sqlx.DB {
 // setGlobalDB 测试用：替换全局数据库连接（migrate_test.go 使用）
 func setGlobalDB(d *sqlx.DB) {
 	db = d
+}
+
+// PingContext 健康检查：验证连接可用
+func PingContext(ctx context.Context) error {
+	return db.PingContext(ctx)
+}
+
+// LatestMigrationVersion 当前已应用的最大迁移版本（就绪探针用）；无版本记录返回 -1
+func LatestMigrationVersion(ctx context.Context) (int, error) {
+	var v int
+	err := db.GetContext(ctx, &v,
+		"SELECT COALESCE(MAX(version), -1) FROM schema_migrations")
+	return v, err
 }

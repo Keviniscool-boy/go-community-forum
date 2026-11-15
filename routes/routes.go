@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"github.com/spf13/viper"
 	"time"
 )
 
@@ -22,8 +23,6 @@ func Setup() *gin.Engine {
 		c.String(http.StatusOK, "OK")
 	})
 
-	// 注册 Swagger 文档路由
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	v1 := r.Group("api/v1")
 
 	// 注册路由
@@ -36,9 +35,14 @@ func Setup() *gin.Engine {
 	auth.POST("/send-code", controller.SendCodeHandler)
 	auth.POST("/register", controller.RegisterHandler)
 	auth.POST("/login", controller.EmailLoginHandler)
-	auth.POST("/reset-password", controller.ResetPasswordHandler)
+	auth.POST("/password/reset/verify", controller.VerifyResetCodeHandler)
+	auth.POST("/password/reset", controller.ResetWithTokenHandler)
 	auth.PUT("/profile", middlewares.JWTAuthMiddleware(), controller.UpdateProfileHandler)
 	auth.GET("/me", middlewares.JWTAuthMiddleware(), controller.MeHandler)
+	auth.POST("/logout-all", middlewares.JWTAuthMiddleware(), controller.LogoutAllHandler)
+	auth.POST("/email/bind", middlewares.JWTAuthMiddleware(), controller.BindEmailHandler)
+	// 发送绑定验证码需要登录（purpose=bind_email），与公开发码路由分开注册
+	auth.POST("/send-code/bind", middlewares.JWTAuthMiddleware(), controller.BindSendCodeHandler)
 
 	// 问答相关路由
 	v1.POST("/questions", middlewares.JWTAuthMiddleware(), controller.CreateQuestionHandler)
@@ -47,22 +51,24 @@ func Setup() *gin.Engine {
 	v1.GET("/questions/:id/answers", controller.ListAnswersHandler)
 
 	// Feed 相关路由（following 需登录，其余公开）
-	v1.GET("/feed/:type", controller.GetFeedHandler)
+	v1.GET("/feed/:type", middlewares.OptionalAuthMiddleware(), controller.GetFeedHandler)
 
 	// 互动相关路由
 	v1.POST("/users/:id/follow", middlewares.JWTAuthMiddleware(), controller.FollowUserHandler)
 	v1.DELETE("/users/:id/follow", middlewares.JWTAuthMiddleware(), controller.UnfollowUserHandler)
+	v1.PATCH("/answers/:id", middlewares.JWTAuthMiddleware(), controller.EditAnswerHandler)
 	v1.PUT("/answers/:id", middlewares.JWTAuthMiddleware(), controller.EditAnswerHandler)
 	v1.DELETE("/answers/:id", middlewares.JWTAuthMiddleware(), controller.DeleteAnswerHandler)
 	v1.POST("/answers/:id/vote", middlewares.JWTAuthMiddleware(), controller.VoteAnswerHandler)
 	v1.POST("/answers/:id/collect", middlewares.JWTAuthMiddleware(), controller.CollectAnswerHandler)
 	v1.DELETE("/answers/:id/collect", middlewares.JWTAuthMiddleware(), controller.UncollectAnswerHandler)
-	v1.GET("/answers/:id/interactions", controller.GetAnswerInteractionsHandler)
+	v1.GET("/answers/:id/interactions", middlewares.OptionalAuthMiddleware(), controller.GetAnswerInteractionsHandler)
+	v1.PATCH("/questions/:id", middlewares.JWTAuthMiddleware(), controller.EditQuestionHandler)
 	v1.PUT("/questions/:id", middlewares.JWTAuthMiddleware(), controller.EditQuestionHandler)
 	v1.DELETE("/questions/:id", middlewares.JWTAuthMiddleware(), controller.DeleteQuestionHandler)
 	v1.POST("/questions/:id/follow", middlewares.JWTAuthMiddleware(), controller.FollowQuestionHandler)
 	v1.DELETE("/questions/:id/follow", middlewares.JWTAuthMiddleware(), controller.UnfollowQuestionHandler)
-	v1.GET("/questions/:id/interactions", controller.GetQuestionInteractionsHandler)
+	v1.GET("/questions/:id/interactions", middlewares.OptionalAuthMiddleware(), controller.GetQuestionInteractionsHandler)
 
 	// 评论相关路由
 	v1.POST("/comments", middlewares.JWTAuthMiddleware(), controller.CreateCommentHandler)
@@ -103,7 +109,15 @@ func Setup() *gin.Engine {
 	// 按热度/时间排序的帖子列表
 	v1.GET("/posts2/", controller.GetPostList2Handler)
 
-	pprof.Register(r) // 注册 pprof 路由
+	// 健康检查：存活与就绪分离，就绪检查依赖与迁移版本
+	r.GET("/healthz", controller.HealthzHandler)
+	r.GET("/readyz", controller.ReadyzHandler)
+
+	// pprof 与 Swagger 仅在非生产模式注册（生产环境暴露有安全风险）
+	if viper.GetString("app.mode") != "prod" {
+		pprof.Register(r) // 注册 pprof 路由
+		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	}
 
 	r.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{

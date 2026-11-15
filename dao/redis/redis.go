@@ -56,3 +56,8 @@ func Close() {
 func GetClient() *redis.Client {
 	return rdb
 }
+
+// PingContext 健康检查：验证连接可用
+func PingContext(ctx context.Context) error {
+	return rdb.Ping(ctx).Err()
+}

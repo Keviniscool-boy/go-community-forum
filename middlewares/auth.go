@@ -42,22 +42,11 @@ func JWTAuthMiddleware() func(c *gin.Context) {
 
 		// token_version 校验：Redis 缓存 5 分钟，未命中回查 MySQL
 		// 密码重置会 +1 并清缓存，使该用户所有旧 token 立即失效
-		version, err := redis.GetTokenVersionCached(mc.UserId)
+		version, err := currentTokenVersion(mc.UserId)
 		if err != nil {
-			zap.L().Error("get token version cache failed", zap.Int64("uid", mc.UserId), zap.Error(err))
 			controller.ResponseError(c, controller.CodeServerBusy)
 			c.Abort()
 			return
-		}
-		if version == -1 {
-			version, err = mysql.GetUserTokenVersion(mc.UserId)
-			if err != nil {
-				zap.L().Error("get token version failed", zap.Int64("uid", mc.UserId), zap.Error(err))
-				controller.ResponseError(c, controller.CodeInvalidAuth)
-				c.Abort()
-				return
-			}
-			redis.SetTokenVersionCache(mc.UserId, version)
 		}
 		if version != mc.TokenVersion {
 			// 旧会话（密码重置前签发）一律拒绝
@@ -72,4 +61,22 @@ func JWTAuthMiddleware() func(c *gin.Context) {
 
 		c.Next()
 	}
+}
+
+// currentTokenVersion 读取当前有效的 token 版本（缓存优先）
+func currentTokenVersion(userID int64) (int, error) {
+	version, err := redis.GetTokenVersionCached(userID)
+	if err != nil {
+		zap.L().Error("get token version cache failed", zap.Int64("uid", userID), zap.Error(err))
+		return 0, err
+	}
+	if version == -1 {
+		version, err = mysql.GetUserTokenVersion(userID)
+		if err != nil {
+			zap.L().Error("get token version failed", zap.Int64("uid", userID), zap.Error(err))
+			return 0, err
+		}
+		redis.SetTokenVersionCache(userID, version)
+	}
+	return version, nil
 }

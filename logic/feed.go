@@ -254,14 +254,14 @@ func GetHotFeed(cursor string, limit int) (*models.PageResult[*models.FeedItem],
 	if limit > 50 {
 		limit = 50
 	}
-	offset, snap, err := parseOffsetAndSnapshot(cursor)
+	offset, snap, err := parseOffsetAndSnapshot(cursor, 0)
 	if err != nil {
 		return nil, err
 	}
 	items, hasMore := sliceFeedPage(snap.Entries, offset, limit)
 	next := ""
 	if hasMore {
-		next = encodeOffsetCursor(offset+limit, snap.Version)
+		next = encodeOffsetCursor(offset+limit, snap.Version, 0)
 	}
 	return &models.PageResult[*models.FeedItem]{
 		Items:      items,
@@ -278,7 +278,7 @@ func GetRecommendFeed(userID int64, cursor string, limit int) (*models.PageResul
 	if limit > 50 {
 		limit = 50
 	}
-	offset, snap, err := parseOffsetAndSnapshot(cursor)
+	offset, snap, err := parseOffsetAndSnapshot(cursor, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +295,7 @@ func GetRecommendFeed(userID int64, cursor string, limit int) (*models.PageResul
 	items, hasMore := recommendPage(snap.Entries, followed, offset, limit)
 	next := ""
 	if hasMore {
-		next = encodeOffsetCursor(offset+limit, snap.Version)
+		next = encodeOffsetCursor(offset+limit, snap.Version, userID)
 	}
 	return &models.PageResult[*models.FeedItem]{
 		Items:      items,
@@ -306,10 +306,14 @@ func GetRecommendFeed(userID int64, cursor string, limit int) (*models.PageResul
 
 // parseOffsetAndSnapshot 解析 offset 游标并校验快照版本：
 // 游标携带的版本与当前缓存版本不一致时返回 ErrFeedSnapshotExpired（客户端应重刷首页）
-func parseOffsetAndSnapshot(cursor string) (int, *cachedFeedSnapshot, error) {
-	offset, cursorVersion, err := parseOffsetCursor(cursor)
+func parseOffsetAndSnapshot(cursor string, userID int64) (int, *cachedFeedSnapshot, error) {
+	offset, cursorVersion, cursorUser, err := parseOffsetCursor(cursor)
 	if err != nil {
 		return 0, nil, ErrCursorInvalid
+	}
+	// 快照绑定用户上下文：跨账号复用游标一律判过期
+	if cursorUser != userID {
+		return 0, nil, ErrFeedSnapshotExpired
 	}
 	snap, err := getHotFeedCache()
 	if err != nil {
@@ -349,6 +353,7 @@ func timeOrderedFeed(cursor string, limit int, authorIDs []int64) (*models.PageR
 		limit = 50
 	}
 	var cursorTime time.Time
+	var cursorType string
 	var cursorID int64
 	if cursor != "" {
 		c, err := parseTimeCursor(cursor)
@@ -356,14 +361,15 @@ func timeOrderedFeed(cursor string, limit int, authorIDs []int64) (*models.PageR
 			return nil, ErrCursorInvalid
 		}
 		cursorTime = c.Time
+		cursorType = c.Type
 		cursorID = c.ID
 	}
 	var rows []*mysql.FeedRow
 	var err error
 	if authorIDs == nil {
-		rows, err = mysql.LatestFeedPage(cursorTime, cursorID, limit+1)
+		rows, err = mysql.LatestFeedPage(cursorTime, cursorType, cursorID, limit+1)
 	} else {
-		rows, err = mysql.FollowingFeedPage(authorIDs, cursorTime, cursorID, limit+1)
+		rows, err = mysql.FollowingFeedPage(authorIDs, cursorTime, cursorType, cursorID, limit+1)
 	}
 	if err != nil {
 		return nil, err
@@ -380,7 +386,7 @@ func timeOrderedFeed(cursor string, limit int, authorIDs []int64) (*models.PageR
 	next := ""
 	if hasMore && len(rows) > 0 {
 		last := rows[len(rows)-1]
-		next = encodeTimeCursor(last.CreateTime, last.ItemID)
+		next = encodeFeedTimeCursor(last.CreateTime, last.ItemType, last.ItemID)
 	}
 	return &models.PageResult[*models.FeedItem]{
 		Items:      items,
@@ -393,6 +399,7 @@ func timeOrderedFeed(cursor string, limit int, authorIDs []int64) (*models.PageR
 
 type timeCursor struct {
 	Time time.Time `json:"t"`
+	Type string    `json:"ty,omitempty"` // item_type，排序 tie-breaker
 	ID   int64     `json:"i"`
 }
 
@@ -412,29 +419,35 @@ func parseTimeCursor(cursor string) (*timeCursor, error) {
 	return &c, nil
 }
 
+// encodeFeedTimeCursor Feed 游标：时间 + 类型 + ID 三字段排序键
+func encodeFeedTimeCursor(t time.Time, itemType string, id int64) string {
+	return base64Encode(marshalJSONMust(&timeCursor{Time: t, Type: itemType, ID: id}))
+}
+
 type offsetCursor struct {
 	Offset  int   `json:"o"`
 	Version int64 `json:"v,omitempty"` // 绑定的热榜缓存快照版本
+	UserID  int64 `json:"u,omitempty"` // 快照绑定用户（游客为 0），防止跨账号复用游标
 }
 
-func encodeOffsetCursor(offset int, version int64) string {
-	return base64Encode(marshalJSONMust(&offsetCursor{Offset: offset, Version: version}))
+func encodeOffsetCursor(offset int, version int64, userID int64) string {
+	return base64Encode(marshalJSONMust(&offsetCursor{Offset: offset, Version: version, UserID: userID}))
 }
 
-func parseOffsetCursor(cursor string) (int, int64, error) {
+func parseOffsetCursor(cursor string) (int, int64, int64, error) {
 	if cursor == "" {
-		return 0, 0, nil
+		return 0, 0, 0, nil
 	}
 	raw, err := base64Decode(cursor)
 	if err != nil {
-		return 0, 0, ErrCursorInvalid
+		return 0, 0, 0, ErrCursorInvalid
 	}
 	var c offsetCursor
 	if err := unmarshalJSONMust(raw, &c); err != nil {
-		return 0, 0, ErrCursorInvalid
+		return 0, 0, 0, ErrCursorInvalid
 	}
 	if c.Offset < 0 {
-		return 0, 0, ErrCursorInvalid
+		return 0, 0, 0, ErrCursorInvalid
 	}
-	return c.Offset, c.Version, nil
+	return c.Offset, c.Version, c.UserID, nil
 }

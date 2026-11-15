@@ -135,24 +135,25 @@ func MeHandler(c *gin.Context) {
 	ResponseSuccess(c, user)
 }
 
-// ResetPasswordHandler 找回密码
-// @Summary 找回密码
-// @Description 使用 reset_password 验证码重置密码；成功后所有旧会话（旧 JWT）立即失效。
-// @Description 统一响应：无论邮箱是否存在，验证码正确即返回成功，防止账号枚举
+// VerifyResetCodeHandler 找回密码第一步
+// @Summary 找回密码：验证码换重置凭据
+// @Description 校验 reset_password 验证码，返回一次性、短时效的 reset_token；
+// @Description 凭据明文仅本次响应可见，服务端只存摘要
 // @Tags 认证相关接口
 // @Accept json
 // @Produce json
-// @Param object body models.ParamResetPassword true "重置参数"
-// @Success 200 {object} controller.Response
-// @Router /auth/reset-password [post]
-func ResetPasswordHandler(c *gin.Context) {
-	p := new(models.ParamResetPassword)
+// @Param object body models.ParamVerifyResetCode true "邮箱与验证码"
+// @Success 200 {object} controller.Response{data=map[string]interface{}}
+// @Router /auth/password/reset/verify [post]
+func VerifyResetCodeHandler(c *gin.Context) {
+	p := new(models.ParamVerifyResetCode)
 	if err := c.ShouldBindJSON(p); err != nil {
 		ResponseErrorWithMsg(c, CodeInvalidParams, Translate(err))
 		return
 	}
-	if err := logic.ResetPassword(p); err != nil {
-		zap.L().Error("logic.ResetPassword failed", zap.Error(err))
+	token, expiresIn, err := logic.VerifyResetCode(p)
+	if err != nil {
+		zap.L().Error("logic.VerifyResetCode failed", zap.Error(err))
 		switch {
 		case errors.Is(err, redis.ErrVerifyCodeInvalid):
 			ResponseError(c, CodeVerifyCodeInvalid)
@@ -163,6 +164,94 @@ func ResetPasswordHandler(c *gin.Context) {
 		}
 		return
 	}
+	ResponseSuccess(c, gin.H{"reset_token": token, "expires_in": expiresIn})
+}
+
+// ResetWithTokenHandler 找回密码第二步
+// @Summary 找回密码：凭据设置新密码
+// @Description 凭据单次消费（重复使用失败），改密与撤销所有旧会话同事务完成
+// @Tags 认证相关接口
+// @Accept json
+// @Produce json
+// @Param object body models.ParamResetWithToken true "重置凭据与新密码"
+// @Success 200 {object} controller.Response
+// @Router /auth/password/reset [post]
+func ResetWithTokenHandler(c *gin.Context) {
+	p := new(models.ParamResetWithToken)
+	if err := c.ShouldBindJSON(p); err != nil {
+		ResponseErrorWithMsg(c, CodeInvalidParams, Translate(err))
+		return
+	}
+	if err := logic.ResetPasswordWithToken(p); err != nil {
+		zap.L().Error("logic.ResetPasswordWithToken failed", zap.Error(err))
+		switch {
+		case errors.Is(err, mysql.ErrResetTokenInvalid):
+			ResponseError(c, CodeResetTokenInvalid)
+		default:
+			ResponseError(c, CodeServerBusy)
+		}
+		return
+	}
+	ResponseSuccess(c, nil)
+}
+
+// BindEmailHandler 绑定已验证邮箱
+// @Summary 绑定邮箱
+// @Description 登录用户使用 bind_email 验证码绑定真实邮箱；占位邮箱的旧账号通过此流程完成迁移。
+// @Description 成功后撤销所有旧会话，需重新登录；邮箱被他人占用返回明确错误
+// @Tags 认证相关接口
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param object body models.ParamBindEmail true "邮箱与验证码"
+// @Success 200 {object} controller.Response
+// @Router /auth/email/bind [post]
+func BindEmailHandler(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ResponseError(c, CodeNeedLogin)
+		return
+	}
+	p := new(models.ParamBindEmail)
+	if err := c.ShouldBindJSON(p); err != nil {
+		ResponseErrorWithMsg(c, CodeInvalidParams, Translate(err))
+		return
+	}
+	if err := logic.BindEmail(userID, p); err != nil {
+		zap.L().Error("logic.BindEmail failed", zap.Error(err))
+		switch {
+		case errors.Is(err, redis.ErrVerifyCodeInvalid):
+			ResponseError(c, CodeVerifyCodeInvalid)
+		case errors.Is(err, redis.ErrVerifyCodeLocked):
+			ResponseError(c, CodeVerifyCodeLocked)
+		case errors.Is(err, mysql.ErrEmailTaken):
+			ResponseError(c, CodeEmailConflict)
+		default:
+			ResponseError(c, CodeServerBusy)
+		}
+		return
+	}
+	ResponseSuccess(c, nil)
+}
+
+// LogoutAllHandler 全部设备登出
+// @Summary 退出所有设备
+// @Description 递增 token_version，撤销当前用户所有已签发 token
+// @Tags 认证相关接口
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} controller.Response
+// @Router /auth/logout-all [post]
+func LogoutAllHandler(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ResponseError(c, CodeNeedLogin)
+		return
+	}
+	if err := logic.LogoutAll(userID); err != nil {
+		ResponseError(c, CodeServerBusy)
+		return
+	}
 	ResponseSuccess(c, nil)
 }
 
@@ -170,4 +259,41 @@ func ResetPasswordHandler(c *gin.Context) {
 type AuthResponse struct {
 	Token string           `json:"token"`
 	User  *models.AuthUser `json:"user"`
+}
+
+// BindSendCodeHandler 发送邮箱绑定验证码（需登录，purpose 固定 bind_email）
+// @Summary 发送绑定邮箱验证码
+// @Description 仅登录用户可发送；绑定流程专用验证码
+// @Tags 认证相关接口
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param object body models.ParamSendCode true "邮箱与用途（bind_email）"
+// @Success 200 {object} controller.Response
+// @Router /auth/send-code/bind [post]
+func BindSendCodeHandler(c *gin.Context) {
+	if _, err := getCurrentUserID(c); err != nil {
+		ResponseError(c, CodeNeedLogin)
+		return
+	}
+	p := new(models.ParamSendCode)
+	if err := c.ShouldBindJSON(p); err != nil {
+		ResponseErrorWithMsg(c, CodeInvalidParams, Translate(err))
+		return
+	}
+	if p.Purpose != models.CodePurposeBindEmail {
+		ResponseError(c, CodeInvalidParams)
+		return
+	}
+	if err := logic.SendCode(p.Email, models.CodePurposeBindEmail, c.ClientIP()); err != nil {
+		zap.L().Error("logic.SendCode(bind) failed", zap.Error(err))
+		switch {
+		case errors.Is(err, redis.ErrCodeSendTooFrequent), errors.Is(err, redis.ErrCodeSendIPLimited):
+			ResponseError(c, CodeSendTooFrequent)
+		default:
+			ResponseError(c, CodeSendCodeFailed)
+		}
+		return
+	}
+	ResponseSuccess(c, nil)
 }

@@ -153,3 +153,9 @@ func InvalidateTokenVersionCache(userID int64) {
 	ctx := context.Background()
 	rdb.Del(ctx, getRedisKey(fmt.Sprintf("%s%d", keyAuthTokenVer, userID)))
 }
+
+// InvalidateAuthCode 使指定验证码失效（邮件发送失败时调用，避免无效码残留）
+func InvalidateAuthCode(email, purpose string) {
+	ctx := context.Background()
+	rdb.Del(ctx, getRedisKey(keyAuthCodePrefix+purpose+":"+email))
+}

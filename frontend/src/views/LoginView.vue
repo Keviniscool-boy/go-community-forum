@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Message as MessageIcon, Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { safeRedirect } from '@/router'
 import { ApiError } from '@/api/http'
 
 const auth = useAuthStore()
@@ -21,7 +22,7 @@ async function onSubmit() {
   try {
     await auth.login(email.value.trim(), password.value)
     ElMessage.success('登录成功')
-    router.push((route.query.redirect as string) || '/')
+    router.push(safeRedirect(route.query.redirect))
   } catch (e) {
     if (e instanceof ApiError) ElMessage.error(e.message)
   } finally {

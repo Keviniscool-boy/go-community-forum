@@ -47,28 +47,30 @@ func int64sToArgs(ids []int64) []interface{} {
 	return args
 }
 
-// LatestFeedPage 最新 Feed：按创建时间倒序 cursor 分页
-func LatestFeedPage(cursorTime time.Time, cursorID int64, limit int) (rows []*FeedRow, err error) {
+// LatestFeedPage 最新 Feed：按 (create_time, item_type, item_id) 降序 cursor 分页
+// WHERE 的游标比较与 ORDER BY 使用同一字典序；item_type 保证跨类型行也全序
+func LatestFeedPage(cursorTime time.Time, cursorType string, cursorID int64, limit int) (rows []*FeedRow, err error) {
 	rows = make([]*FeedRow, 0, limit)
 	qCond := "1 = 1"
 	aCond := "1 = 1"
-	args := make([]interface{}, 0, 8)
+	args := make([]interface{}, 0, 12)
 	if cursorID > 0 {
-		qCond = "(q.create_time < ? OR (q.create_time = ? AND q.question_id < ?))"
-		aCond = "(a.create_time < ? OR (a.create_time = ? AND a.answer_id < ?))"
-		args = append(args, cursorTime, cursorTime, cursorID, cursorTime, cursorTime, cursorID)
+		qCond = "(q.create_time < ? OR (q.create_time = ? AND ('question' < ? OR ('question' = ? AND q.question_id < ?))))"
+		aCond = "(a.create_time < ? OR (a.create_time = ? AND ('answer' < ? OR ('answer' = ? AND a.answer_id < ?))))"
+		args = append(args, cursorTime, cursorTime, cursorType, cursorType, cursorID,
+			cursorTime, cursorTime, cursorType, cursorType, cursorID)
 	}
-	query := fmt.Sprintf(feedUnionSQL, qCond, aCond) + " ORDER BY create_time DESC, item_id DESC LIMIT ?"
+	query := fmt.Sprintf(feedUnionSQL, qCond, aCond) + " ORDER BY create_time DESC, item_type DESC, item_id DESC LIMIT ?"
 	args = append(args, limit)
 	err = db.Select(&rows, query, args...)
 	return
 }
 
-// FollowingFeedPage 关注 Feed：只取关注用户的内容，按创建时间倒序 cursor 分页
+// FollowingFeedPage 关注 Feed：只取关注用户的内容，按 (create_time, item_type, item_id) 降序 cursor 分页
 // 参数顺序必须与 SQL 占位符顺序一致：
-//   第一段 SELECT：q.author_id IN (...) → 游标 3 个；
-//   第二段 SELECT：a.author_id IN (...) → 游标 3 个
-func FollowingFeedPage(authorIDs []int64, cursorTime time.Time, cursorID int64, limit int) (rows []*FeedRow, err error) {
+//   第一段 SELECT：q.author_id IN (...) → 游标 5 个；
+//   第二段 SELECT：a.author_id IN (...) → 游标 5 个
+func FollowingFeedPage(authorIDs []int64, cursorTime time.Time, cursorType string, cursorID int64, limit int) (rows []*FeedRow, err error) {
 	rows = make([]*FeedRow, 0, limit)
 	// IN 占位符
 	placeholders := ""
@@ -81,23 +83,22 @@ func FollowingFeedPage(authorIDs []int64, cursorTime time.Time, cursorID int64, 
 	qCond := "q.author_id IN (" + placeholders + ")"
 	aCond := "a.author_id IN (" + placeholders + ")"
 	if cursorID > 0 {
-		qCond += " AND (q.create_time < ? OR (q.create_time = ? AND q.question_id < ?))"
-		aCond += " AND (a.create_time < ? OR (a.create_time = ? AND a.answer_id < ?))"
+		qCond += " AND (q.create_time < ? OR (q.create_time = ? AND ('question' < ? OR ('question' = ? AND q.question_id < ?))))"
+		aCond += " AND (a.create_time < ? OR (a.create_time = ? AND ('answer' < ? OR ('answer' = ? AND a.answer_id < ?))))"
 	}
-	// item_id 由雪花算法全局生成，跨 question/answer 两表保证唯一，
-	// 因此 (create_time, item_id) 是全序，keyset 分页不会漏数据或重复
-	query := fmt.Sprintf(feedUnionSQL, qCond, aCond) + " ORDER BY create_time DESC, item_id DESC LIMIT ?"
+	// 排序与游标使用同一字典序：(create_time DESC, item_type DESC, item_id DESC)，keyset 分页不漏不重
+	query := fmt.Sprintf(feedUnionSQL, qCond, aCond) + " ORDER BY create_time DESC, item_type DESC, item_id DESC LIMIT ?"
 
-	args := make([]interface{}, 0, len(authorIDs)*2+8)
+	args := make([]interface{}, 0, len(authorIDs)*2+12)
 	// 第一段：作者 IN + 游标
 	args = append(args, int64sToArgs(authorIDs)...)
 	if cursorID > 0 {
-		args = append(args, cursorTime, cursorTime, cursorID)
+		args = append(args, cursorTime, cursorTime, cursorType, cursorType, cursorID)
 	}
 	// 第二段：作者 IN + 游标
 	args = append(args, int64sToArgs(authorIDs)...)
 	if cursorID > 0 {
-		args = append(args, cursorTime, cursorTime, cursorID)
+		args = append(args, cursorTime, cursorTime, cursorType, cursorType, cursorID)
 	}
 	args = append(args, limit)
 	err = db.Select(&rows, query, args...)

@@ -19,11 +19,18 @@ var (
 
 // CreateQuestion 创建问题
 func CreateQuestion(p *models.ParamCreateQuestion, authorID int64) (questionID int64, err error) {
-	// 解析话题 id（前端传雪花 id 字符串）
+	// 解析话题 id（前端传雪花 id 字符串），话题必须真实存在
 	topicIDs := make([]int64, 0, len(p.TopicIDs))
 	for _, s := range p.TopicIDs {
 		id, err := strconv.ParseInt(s, 10, 64)
 		if err != nil || id <= 0 {
+			return 0, ErrQuestionInvalid
+		}
+		exists, err := mysql.TopicExists(id)
+		if err != nil {
+			return 0, err
+		}
+		if !exists {
 			return 0, ErrQuestionInvalid
 		}
 		topicIDs = append(topicIDs, id)
@@ -93,7 +100,14 @@ func CreateAnswer(questionID int64, p *models.ParamCreateAnswer, authorID int64)
 }
 
 // ListAnswers 问题下的回答列表（cursor 分页）
+// 问题不存在或已软删除时统一不可见（公开入口不返回已删除内容的数据）
 func ListAnswers(questionID int64, order, cursor string, limit int) (*models.PageResult[*models.ApiAnswerDetail], error) {
+	if _, err := mysql.GetQuestionByID(questionID); err != nil {
+		if errors.Is(err, mysql.ErrQuestionNotExist) {
+			return nil, ErrQuestionNotExist
+		}
+		return nil, err
+	}
 	// limit 默认 20，最大 50
 	if limit <= 0 {
 		limit = 20

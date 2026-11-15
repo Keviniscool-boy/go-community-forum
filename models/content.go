@@ -65,7 +65,7 @@ type ApiAnswerDetail struct {
 
 // ParamCreateAnswer 创建回答请求
 type ParamCreateAnswer struct {
-	Content string `json:"content" binding:"required,min=1,max=100000"`
+	Content string `json:"content" binding:"required,min=1,max=20000"`
 }
 
 // 回答列表排序方式
@@ -92,17 +92,18 @@ type ParamCreateTopic struct {
 
 // ParamUpdateQuestion 编辑问题请求
 type ParamUpdateQuestion struct {
-	Title       string `json:"title" binding:"required,min=5,max=200"`
+	Title       string `json:"title" binding:"required,min=1,max=200"`
 	Description string `json:"description" binding:"max=10000"`
 }
 
 // ParamUpdateAnswer 编辑回答请求
 type ParamUpdateAnswer struct {
-	Content string `json:"content" binding:"required,min=1,max=100000"`
+	Content string `json:"content" binding:"required,min=1,max=20000"`
 }
 
-// ParamUpdateProfile 更新个人资料请求
+// ParamUpdateProfile 更新个人资料请求（用户名可选，非空时更新）
 type ParamUpdateProfile struct {
+	Username  string `json:"username" binding:"omitempty,min=2,max=32"`
 	Bio       string `json:"bio" binding:"max=500"`
 	AvatarURL string `json:"avatar_url" binding:"max=500"`
 }

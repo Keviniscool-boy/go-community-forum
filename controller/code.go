@@ -1,41 +1,46 @@
 package controller
 
+// 业务错误码：显式分配，不再依赖 iota 排列，防止在中间插入新码导致已发布数字变化。
+// 已对齐 frontend/src/api/http.ts 与文档中的错误码契约。
 type ResCode int64
 
 const (
-	CodeSuccess ResCode = 1000 + iota
-	CodeInvalidParams
-	CodeUserExist
-	CodeUserNotExist
-	CodeInvalidCredentials
-	CodePasswordMismatch
-	CodeServerBusy
-	CodePostNotExist
-	CodeCommunityNotExist
+	CodeSuccess           ResCode = 1000
+	CodeInvalidParams     ResCode = 1001
+	CodeUserExist         ResCode = 1002
+	CodeUserNotExist      ResCode = 1003
+	CodeInvalidCredentials ResCode = 1004
+	CodePasswordMismatch  ResCode = 1005
+	CodeServerBusy        ResCode = 1006
+	CodePostNotExist      ResCode = 1007
+	CodeCommunityNotExist ResCode = 1008
 
-	CodeInvalidAuth
-	CodeNeedLogin
+	CodeInvalidAuth ResCode = 1009
+	CodeNeedLogin   ResCode = 1010
 
-	CodeVoteTimeExpire
-	CodeRepeatedVote
+	CodeVoteTimeExpire ResCode = 1011
+	CodeRepeatedVote   ResCode = 1012
 
-	CodeEmailExist
-	CodeEmailNotExist
-	CodeSendTooFrequent
-	CodeVerifyCodeInvalid
-	CodeAccountBanned
+	CodeEmailExist        ResCode = 1013
+	CodeEmailNotExist     ResCode = 1014
+	CodeSendTooFrequent   ResCode = 1015
+	CodeVerifyCodeInvalid ResCode = 1016
+	CodeAccountBanned     ResCode = 1017
 
-	CodeQuestionNotExist
-	CodeAnswerNotExist
-	CodeTopicExist
+	CodeQuestionNotExist ResCode = 1018
+	CodeAnswerNotExist   ResCode = 1019
+	CodeTopicExist       ResCode = 1020
 
-	CodeRegisterFailed
-	CodeSendCodeFailed
-	CodeVerifyCodeLocked
+	CodeRegisterFailed  ResCode = 1021
+	CodeSendCodeFailed  ResCode = 1022
+	CodeVerifyCodeLocked ResCode = 1023
 
-	CodeFeedRefreshing
-	CodeFeedExpired
-	CodeForbidden
+	CodeFeedRefreshing ResCode = 1024
+	CodeFeedExpired    ResCode = 1025
+	CodeForbidden      ResCode = 1026
+
+	CodeResetTokenInvalid ResCode = 1027
+	CodeEmailConflict     ResCode = 1028
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -66,6 +71,8 @@ var codeMsgMap = map[ResCode]string{
 	CodeFeedRefreshing:     "内容更新中，请稍后重试",
 	CodeFeedExpired:        "列表已更新，请刷新重试",
 	CodeForbidden:          "无权操作该内容",
+	CodeResetTokenInvalid:  "重置凭据无效或已过期",
+	CodeEmailConflict:      "该邮箱已被其他账号使用",
 }
 
 // 创建一个函数，传入code返回msg

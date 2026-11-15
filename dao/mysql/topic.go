@@ -56,6 +56,13 @@ func GetTopicsByQuestionIDs(questionIDs []int64) (map[int64][]*models.TopicBrief
 	return result, nil
 }
 
+// TopicExists 话题是否存在
+func TopicExists(topicID int64) (bool, error) {
+	var count int
+	err := db.Get(&count, "SELECT COUNT(topic_id) FROM topic WHERE topic_id = ?", topicID)
+	return count > 0, err
+}
+
 // CreateTopic 创建话题
 func CreateTopic(t *models.Topic) error {
 	_, err := db.Exec("INSERT INTO topic (topic_id, name, description, avatar_url) VALUES (?, ?, ?, ?)",

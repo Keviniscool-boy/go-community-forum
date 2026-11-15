@@ -21,7 +21,7 @@ var testDSN = os.Getenv("BB_TEST_MYSQL_DSN")
 
 // tempDBDSN 拼接临时库 DSN（库名后追加连接参数）
 func tempDBDSN(name string) string {
-	return testDSN + name + "?charset=utf8mb4&parseTime=True&loc=Local"
+	return testDSN + name + "?charset=utf8mb4&parseTime=True&loc=UTC"
 }
 
 func requireMySQL(t *testing.T) *sqlx.DB {
@@ -105,13 +105,13 @@ func TestMigrationsFreshDB(t *testing.T) {
 		}
 	}
 
-	// 版本记录 000-004
+	// 版本记录 000-005（新增迁移后同步更新数量断言）
 	var versions []int
 	if err := db.Select(&versions, "SELECT version FROM schema_migrations ORDER BY version"); err != nil {
 		t.Fatal(err)
 	}
-	if len(versions) != 5 {
-		t.Fatalf("expected 5 migrations recorded, got %v", versions)
+	if len(versions) != 6 {
+		t.Fatalf("expected 6 migrations recorded, got %v", versions)
 	}
 
 	// 基线社区种子存在

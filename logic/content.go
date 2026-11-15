@@ -58,7 +58,23 @@ func DeleteAnswer(userID, answerID int64) error {
 	return nil
 }
 
-// UpdateProfile 更新个人资料
+// UpdateProfile 更新个人资料（用户名非空时更新，唯一性冲突返回 ErrRegisterConflict）
 func UpdateProfile(userID int64, p *models.ParamUpdateProfile) error {
-	return mysql.UpdateProfile(userID, p.Bio, p.AvatarURL)
+	if p.Username != "" {
+		taken, err := mysql.CheckUsernameExist(p.Username)
+		if err != nil {
+			return err
+		}
+		if taken {
+			// 是否是自己当前用户名
+			self, err := mysql.GetUserByID(userID)
+			if err != nil {
+				return err
+			}
+			if self.Username != p.Username {
+				return ErrRegisterConflict
+			}
+		}
+	}
+	return mysql.UpdateProfile(userID, p.Username, p.Bio, p.AvatarURL)
 }

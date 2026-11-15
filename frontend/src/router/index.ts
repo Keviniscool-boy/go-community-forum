@@ -34,6 +34,14 @@ const router = createRouter({
   ],
 })
 
+// 仅接受站内相对路径的 redirect，防开放重定向：必须以 / 开头且不是协议相对路径（//host）
+export function safeRedirect(raw: unknown): string {
+  if (typeof raw === 'string' && raw.startsWith('/') && !raw.startsWith('//')) {
+    return raw
+  }
+  return '/'
+}
+
 // 登录态恢复：路由守卫，需要登录的页面未登录时跳登录页
 router.beforeEach((to) => {
   document.title = to.meta.title ? `${to.meta.title} - Bluebell 知识社区` : 'Bluebell 知识社区'
