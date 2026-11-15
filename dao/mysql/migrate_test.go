@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 
+	"bluebell/pkg/snowflake"
+
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 )
@@ -26,6 +28,10 @@ func requireMySQL(t *testing.T) *sqlx.DB {
 	t.Helper()
 	if testDSN == "" {
 		t.Skip("BB_TEST_MYSQL_DSN not set, skip integration test")
+	}
+	// 通知等 dao 层写操作使用雪花 ID，集成测试环境统一初始化
+	if err := snowflake.Init("2026-07-24 00:00:00", 1); err != nil {
+		t.Fatalf("init snowflake failed: %v", err)
 	}
 	root, err := sqlx.Connect("mysql", testDSN)
 	if err != nil {

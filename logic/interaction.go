@@ -8,63 +8,25 @@ import (
 	"bluebell/dao/mysql"
 	"bluebell/models"
 	"bluebell/pkg/snowflake"
-	"go.uber.org/zap"
 )
 
 // 互动相关业务错误
-var (
-	ErrAnswerNotExist   = errors.New("回答不存在")
-	ErrCommentInvalid   = errors.New("评论参数不合法")
-)
-
-// targetIDToAuthorID 返回目标内容的作者 id（用于通知）
-func targetAuthorID(targetType int32, targetID int64) (int64, error) {
-	switch targetType {
-	case models.TargetAnswer:
-		a, err := mysql.GetAnswerByID(targetID)
-		if err != nil {
-			return 0, err
-		}
-		return a.AuthorID, nil
-	case models.TargetQuestion:
-		q, err := mysql.GetQuestionByID(targetID)
-		if err != nil {
-			return 0, err
-		}
-		return q.AuthorID, nil
-	}
-	return 0, ErrCommentInvalid
-}
-
-// createNotification 写一条通知（忽略失败，不影响主流程）
-func createNotification(userID, actorID int64, notifyType int32, targetType int32, targetID int64) {
-	n := &models.Notification{
-		NotificationID: snowflake.GenerateID(),
-		UserID:         userID,
-		ActorID:        actorID,
-		Type:           notifyType,
-		TargetType:     targetType,
-		TargetID:       targetID,
-	}
-	if err := mysql.CreateNotification(n); err != nil {
-		zap.L().Warn("create notification failed", zap.Error(err))
-	}
-}
+var ErrAnswerNotExist = errors.New("回答不存在")
+var ErrCommentInvalid = errors.New("评论参数不合法")
 
 // ---------- 关注用户 ----------
 
+// FollowUser 关注用户（通知在 dao 事务内写入）
 func FollowUser(followerID, followingID int64) error {
-	if err := mysql.FollowUser(followerID, followingID); err != nil {
-		return err
-	}
-	createNotification(followingID, followerID, models.NotifyTypeFollow, 0, followerID)
-	return nil
+	return mysql.FollowUser(followerID, followingID)
 }
 
+// UnfollowUser 取消关注
 func UnfollowUser(followerID, followingID int64) error {
 	return mysql.UnfollowUser(followerID, followingID)
 }
 
+// IsFollowing 查询关注关系
 func IsFollowing(followerID, followingID int64) (bool, error) {
 	if followerID <= 0 {
 		return false, nil
@@ -74,26 +36,12 @@ func IsFollowing(followerID, followingID int64) (bool, error) {
 
 // ---------- 回答投票 ----------
 
-// VoteAnswer 投票并记录通知
+// VoteAnswer 投票（通知在 dao 事务内写入）
 func VoteAnswer(userID, answerID int64, direction int8) error {
-	// 校验回答存在
-	a, err := mysql.GetAnswerByID(answerID)
-	if err != nil {
-		if errors.Is(err, mysql.ErrAnswerNotExist) {
-			return ErrAnswerNotExist
-		}
-		return err
-	}
-	if _, err = mysql.VoteAnswer(userID, answerID, direction); err != nil {
-		return err
-	}
-	// 只有新赞同才通知（取消/改反对不通知）
-	if direction == 1 {
-		createNotification(a.AuthorID, userID, models.NotifyTypeLike, models.TargetAnswer, answerID)
-	}
-	return nil
+	return mysql.VoteAnswer(userID, answerID, direction)
 }
 
+// GetUserVoteDirection 当前用户对回答的投票方向
 func GetUserVoteDirection(userID, answerID int64) (int8, error) {
 	if userID <= 0 {
 		return 0, nil
@@ -103,25 +51,17 @@ func GetUserVoteDirection(userID, answerID int64) (int8, error) {
 
 // ---------- 收藏 ----------
 
+// CollectAnswer 收藏回答（通知在 dao 事务内写入）
 func CollectAnswer(userID, answerID int64) error {
-	a, err := mysql.GetAnswerByID(answerID)
-	if err != nil {
-		if errors.Is(err, mysql.ErrAnswerNotExist) {
-			return ErrAnswerNotExist
-		}
-		return err
-	}
-	if err = mysql.CollectAnswer(userID, answerID); err != nil {
-		return err
-	}
-	createNotification(a.AuthorID, userID, models.NotifyTypeCollect, models.TargetAnswer, answerID)
-	return nil
+	return mysql.CollectAnswer(userID, answerID)
 }
 
+// UncollectAnswer 取消收藏
 func UncollectAnswer(userID, answerID int64) error {
 	return mysql.UncollectAnswer(userID, answerID)
 }
 
+// IsCollected 是否已收藏
 func IsCollected(userID, answerID int64) (bool, error) {
 	if userID <= 0 {
 		return false, nil
@@ -131,25 +71,17 @@ func IsCollected(userID, answerID int64) (bool, error) {
 
 // ---------- 关注问题 ----------
 
+// FollowQuestion 关注问题（通知在 dao 事务内写入）
 func FollowQuestion(userID, questionID int64) error {
-	q, err := mysql.GetQuestionByID(questionID)
-	if err != nil {
-		if errors.Is(err, mysql.ErrQuestionNotExist) {
-			return ErrQuestionNotExist
-		}
-		return err
-	}
-	if err = mysql.FollowQuestion(userID, questionID); err != nil {
-		return err
-	}
-	createNotification(q.AuthorID, userID, models.NotifyTypeFollow, models.TargetQuestion, questionID)
-	return nil
+	return mysql.FollowQuestion(userID, questionID)
 }
 
+// UnfollowQuestion 取消关注问题
 func UnfollowQuestion(userID, questionID int64) error {
 	return mysql.UnfollowQuestion(userID, questionID)
 }
 
+// IsQuestionFollowed 是否已关注问题
 func IsQuestionFollowed(userID, questionID int64) (bool, error) {
 	if userID <= 0 {
 		return false, nil
@@ -159,7 +91,7 @@ func IsQuestionFollowed(userID, questionID int64) (bool, error) {
 
 // ---------- 评论 ----------
 
-// CreateComment 发表评论并通知目标作者
+// CreateComment 发表评论（评论、计数、通知在同一事务）
 func CreateComment(p *models.ParamCreateComment, userID int64) (commentID int64, err error) {
 	targetType := models.TargetTypeToCode(p.TargetType)
 	if targetType == 0 {
@@ -184,16 +116,6 @@ func CreateComment(p *models.ParamCreateComment, userID int64) (commentID int64,
 			return 0, ErrCommentInvalid
 		}
 	}
-	// 目标必须存在
-	if _, err = targetAuthorID(targetType, targetID); err != nil {
-		if errors.Is(err, mysql.ErrAnswerNotExist) {
-			return 0, ErrAnswerNotExist
-		}
-		if errors.Is(err, mysql.ErrQuestionNotExist) {
-			return 0, ErrQuestionNotExist
-		}
-		return 0, err
-	}
 	cm := &models.Comment{
 		CommentID:  snowflake.GenerateID(),
 		UserID:     userID,
@@ -202,12 +124,16 @@ func CreateComment(p *models.ParamCreateComment, userID int64) (commentID int64,
 		ParentID:   parentID,
 		Content:    p.Content,
 	}
-	if err = mysql.CreateComment(cm, 0); err != nil {
-		return 0, err
-	}
-	// 通知目标作者
-	if authorID, err := targetAuthorID(targetType, targetID); err == nil {
-		createNotification(authorID, userID, models.NotifyTypeComment, targetType, targetID)
+	// 目标不存在时 dao 层事务内返回 ErrAnswerNotExist / ErrQuestionNotExist
+	if err = mysql.CreateComment(cm); err != nil {
+		switch {
+		case errors.Is(err, mysql.ErrAnswerNotExist):
+			return 0, ErrAnswerNotExist
+		case errors.Is(err, mysql.ErrQuestionNotExist):
+			return 0, ErrQuestionNotExist
+		default:
+			return 0, err
+		}
 	}
 	return cm.CommentID, nil
 }
