@@ -332,7 +332,7 @@ func CreateCommentHandler(c *gin.Context) {
 // @Param target_id query string true "目标 ID"
 // @Param cursor query string false "游标"
 // @Param limit query int false "数量，默认 20，最大 50"
-// @Success 200 {object} controller.Response{data=models.PageResult}
+// @Success 200 {object} controller.Response{data=models.CommentDetailPage}
 // @Router /comments [get]
 func ListCommentsHandler(c *gin.Context) {
 	data, err := logic.ListComments(c.Query("target_type"), c.Query("target_id"), c.Query("cursor"), atoiDefault(c.Query("limit"), 20))
@@ -364,7 +364,7 @@ func atoiDefault(s string, d int) int {
 // @Security ApiKeyAuth
 // @Param cursor query string false "游标"
 // @Param limit query int false "数量，默认 20，最大 50"
-// @Success 200 {object} controller.Response{data=models.PageResult}
+// @Success 200 {object} controller.Response{data=models.NotificationDetailPage}
 // @Router /notifications [get]
 func ListNotificationsHandler(c *gin.Context) {
 	userID, err := getCurrentUserID(c)

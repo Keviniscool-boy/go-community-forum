@@ -18,6 +18,733 @@
     "host": "localhost:8081",
     "basePath": "/api/v1",
     "paths": {
+        "/answers/{answer_id}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "仅作者可编辑回答内容",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "问答相关接口"
+                ],
+                "summary": "编辑回答",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "回答 ID",
+                        "name": "answer_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "更新参数",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamUpdateAnswer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "仅作者可删除，软删除后问题的回答数自动重算",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "问答相关接口"
+                ],
+                "summary": "删除回答",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "回答 ID",
+                        "name": "answer_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/answers/{id}/collect": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "互动相关接口"
+                ],
+                "summary": "收藏回答",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "回答 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "互动相关接口"
+                ],
+                "summary": "取消收藏回答",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "回答 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/answers/{id}/interactions": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "互动相关接口"
+                ],
+                "summary": "回答互动状态",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "回答 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": true
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/answers/{id}/vote": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "对回答投票：direction=1 赞同，-1 反对，0 取消；幂等",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "互动相关接口"
+                ],
+                "summary": "回答投票",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "回答 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "投票方向",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamVoteAnswer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/email/bind": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "登录用户使用 bind_email 验证码绑定真实邮箱；占位邮箱的旧账号通过此流程完成迁移。\n成功后撤销所有旧会话，需重新登录；邮箱被他人占用返回明确错误",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证相关接口"
+                ],
+                "summary": "绑定邮箱",
+                "parameters": [
+                    {
+                        "description": "邮箱与验证码",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamBindEmail"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "description": "使用邮箱和密码登录，返回 token 和用户信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证相关接口"
+                ],
+                "summary": "邮箱登录",
+                "parameters": [
+                    {
+                        "description": "登录参数",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamEmailLogin"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/controller.AuthResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout-all": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "递增 token_version，撤销当前用户所有已签发 token",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证相关接口"
+                ],
+                "summary": "退出所有设备",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/me": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "获取当前登录用户的基本信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证相关接口"
+                ],
+                "summary": "当前用户信息",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.AuthUser"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/password/reset": {
+            "post": {
+                "description": "凭据单次消费（重复使用失败），改密与撤销所有旧会话同事务完成",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证相关接口"
+                ],
+                "summary": "找回密码：凭据设置新密码",
+                "parameters": [
+                    {
+                        "description": "重置凭据与新密码",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamResetWithToken"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/password/reset/verify": {
+            "post": {
+                "description": "校验 reset_password 验证码，返回一次性、短时效的 reset_token；\n凭据明文仅本次响应可见，服务端只存摘要",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证相关接口"
+                ],
+                "summary": "找回密码：验证码换重置凭据",
+                "parameters": [
+                    {
+                        "description": "邮箱与验证码",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamVerifyResetCode"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": true
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/profile": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "更新当前登录用户的简介与头像地址",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证相关接口"
+                ],
+                "summary": "更新个人资料",
+                "parameters": [
+                    {
+                        "description": "资料参数",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamUpdateProfile"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/register": {
+            "post": {
+                "description": "使用邮箱验证码注册账号，成功直接返回 token 和用户信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证相关接口"
+                ],
+                "summary": "邮箱注册",
+                "parameters": [
+                    {
+                        "description": "注册参数",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamEmailRegister"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/controller.AuthResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/send-code": {
+            "post": {
+                "description": "向指定邮箱发送验证码，用于注册/登录/找回密码",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证相关接口"
+                ],
+                "summary": "发送邮箱验证码",
+                "parameters": [
+                    {
+                        "description": "邮箱和用途",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamSendCode"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/send-code/bind": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "仅登录用户可发送；绑定流程专用验证码",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证相关接口"
+                ],
+                "summary": "发送绑定邮箱验证码",
+                "parameters": [
+                    {
+                        "description": "邮箱与用途（bind_email）",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamSendCode"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/comments": {
+            "get": {
+                "description": "按 cursor 分页查询目标的评论",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "评论相关接口"
+                ],
+                "summary": "评论列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "目标类型：answer | question",
+                        "name": "target_type",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "目标 ID",
+                        "name": "target_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "游标",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "数量，默认 20，最大 50",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.CommentDetailPage"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "对回答或问题发表评论，需登录",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "评论相关接口"
+                ],
+                "summary": "创建评论",
+                "parameters": [
+                    {
+                        "description": "评论参数",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamCreateComment"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/community": {
             "get": {
                 "description": "查询所有社区（id、name）列表",
@@ -94,6 +821,52 @@
                 }
             }
         },
+        "/feed/recommend": {
+            "get": {
+                "description": "推荐流（/feed/recommend）、最新流（/feed/latest）、热榜（/feed/hot）为公开接口；\n关注流（/feed/following）需登录；全部使用 cursor 分页",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Feed 相关接口"
+                ],
+                "summary": "Feed 流",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "分页游标（首页不传）",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "数量，默认 20，最大 50",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.FeedItemPage"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/login": {
             "post": {
                 "description": "用户登录接口，登录成功后返回 JWT Token",
@@ -131,6 +904,119 @@
                                     "properties": {
                                         "data": {
                                             "$ref": "#/definitions/controller.LoginResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知相关接口"
+                ],
+                "summary": "通知列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "游标",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "数量，默认 20，最大 50",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.NotificationDetailPage"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/read-all": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知相关接口"
+                ],
+                "summary": "全部通知标记已读",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/unread-count": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知相关接口"
+                ],
+                "summary": "未读通知数",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "integer"
+                                            }
                                         }
                                     }
                                 }
@@ -324,6 +1210,402 @@
                 }
             }
         },
+        "/questions": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "发布新问题，需登录",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "问答相关接口"
+                ],
+                "summary": "创建问题",
+                "parameters": [
+                    {
+                        "description": "问题参数",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamCreateQuestion"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/questions/{id}": {
+            "get": {
+                "description": "根据问题 ID 查询问题详情（含作者名、话题）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "问答相关接口"
+                ],
+                "summary": "问题详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "问题 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.ApiQuestionDetail"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "仅作者可编辑问题标题与补充说明",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "问答相关接口"
+                ],
+                "summary": "编辑问题",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "问题 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "更新参数",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamUpdateQuestion"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "仅作者可删除，软删除后 Feed 与详情不再展示",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "问答相关接口"
+                ],
+                "summary": "删除问题",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "问题 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/questions/{id}/answers": {
+            "get": {
+                "description": "按 cursor 分页查询问题下的回答，支持 hot / latest 排序",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "问答相关接口"
+                ],
+                "summary": "回答列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "问题 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "分页游标（首页不传）",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，默认 20，最大 50",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "排序：latest 最新（默认）| hot 热门",
+                        "name": "order",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.AnswerDetailPage"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "在指定问题下发布回答，需登录",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "问答相关接口"
+                ],
+                "summary": "创建回答",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "问题 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "回答参数",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamCreateAnswer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/questions/{id}/follow": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "互动相关接口"
+                ],
+                "summary": "关注问题",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "问题 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "互动相关接口"
+                ],
+                "summary": "取消关注问题",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "问题 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/questions/{id}/interactions": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "互动相关接口"
+                ],
+                "summary": "问题互动状态",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "问题 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "boolean"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/signup": {
             "post": {
                 "description": "用户注册接口，创建新账号",
@@ -353,6 +1635,396 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/topics": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "话题相关接口"
+                ],
+                "summary": "话题列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "数量，默认 20，最大 50",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/models.Topic"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "创建新话题，需登录，名称唯一",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "话题相关接口"
+                ],
+                "summary": "创建话题",
+                "parameters": [
+                    {
+                        "description": "话题参数",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamCreateTopic"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/topics/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "话题相关接口"
+                ],
+                "summary": "话题详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "话题 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.Topic"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/topics/{id}/follow": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "话题相关接口"
+                ],
+                "summary": "关注话题",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "话题 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "话题相关接口"
+                ],
+                "summary": "取消关注话题",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "话题 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{id}": {
+            "get": {
+                "description": "用户基本信息、内容统计与当前用户的关注关系",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用户相关接口"
+                ],
+                "summary": "用户主页",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/logic.ApiUserProfile"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{id}/answers": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用户相关接口"
+                ],
+                "summary": "用户回答列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/models.ApiAnswerDetail"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{id}/follow": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "关注指定用户，需登录，幂等",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "互动相关接口"
+                ],
+                "summary": "关注用户",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "目标用户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "互动相关接口"
+                ],
+                "summary": "取消关注",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "目标用户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{id}/questions": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用户相关接口"
+                ],
+                "summary": "用户提问列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/models.Question"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
@@ -399,6 +2071,17 @@
         }
     },
     "definitions": {
+        "controller.AuthResponse": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/models.AuthUser"
+                }
+            }
+        },
         "controller.LoginResponse": {
             "type": "object",
             "properties": {
@@ -409,7 +2092,6 @@
         },
         "controller.ResCode": {
             "type": "integer",
-            "format": "int64",
             "enum": [
                 1000,
                 1001,
@@ -423,7 +2105,23 @@
                 1009,
                 1010,
                 1011,
-                1012
+                1012,
+                1013,
+                1014,
+                1015,
+                1016,
+                1017,
+                1018,
+                1019,
+                1020,
+                1021,
+                1022,
+                1023,
+                1024,
+                1025,
+                1026,
+                1027,
+                1028
             ],
             "x-enum-varnames": [
                 "CodeSuccess",
@@ -438,7 +2136,23 @@
                 "CodeInvalidAuth",
                 "CodeNeedLogin",
                 "CodeVoteTimeExpire",
-                "CodeRepeatedVote"
+                "CodeRepeatedVote",
+                "CodeEmailExist",
+                "CodeEmailNotExist",
+                "CodeSendTooFrequent",
+                "CodeVerifyCodeInvalid",
+                "CodeAccountBanned",
+                "CodeQuestionNotExist",
+                "CodeAnswerNotExist",
+                "CodeTopicExist",
+                "CodeRegisterFailed",
+                "CodeSendCodeFailed",
+                "CodeVerifyCodeLocked",
+                "CodeFeedRefreshing",
+                "CodeFeedExpired",
+                "CodeForbidden",
+                "CodeResetTokenInvalid",
+                "CodeEmailConflict"
             ]
         },
         "controller.Response": {
@@ -449,6 +2163,178 @@
                 },
                 "data": {},
                 "msg": {}
+            }
+        },
+        "logic.ApiUserProfile": {
+            "type": "object",
+            "properties": {
+                "answer_count": {
+                    "type": "integer"
+                },
+                "avatar_url": {
+                    "type": "string"
+                },
+                "bio": {
+                    "type": "string"
+                },
+                "follower_count": {
+                    "type": "integer"
+                },
+                "following_count": {
+                    "type": "integer"
+                },
+                "is_following": {
+                    "type": "boolean"
+                },
+                "question_count": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "type": "string",
+                    "example": ""
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.AnswerDetailPage": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ApiAnswerDetail"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ApiAnswerDetail": {
+            "type": "object",
+            "required": [
+                "content"
+            ],
+            "properties": {
+                "author_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "author_name": {
+                    "type": "string"
+                },
+                "collect_count": {
+                    "type": "integer"
+                },
+                "comment_count": {
+                    "type": "integer"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "create_time": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "question_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "question_title": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "vote_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.ApiCommentDetail": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "create_time": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "parent_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "target_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "target_type": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ApiNotificationDetail": {
+            "type": "object",
+            "properties": {
+                "actor_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "actor_name": {
+                    "type": "string"
+                },
+                "create_time": {
+                    "type": "string"
+                },
+                "excerpt": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "is_read": {
+                    "type": "boolean"
+                },
+                "target_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "target_type": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "type": "string",
+                    "example": "0"
+                }
             }
         },
         "models.ApiPostDetail": {
@@ -494,6 +2380,89 @@
                 }
             }
         },
+        "models.ApiQuestionDetail": {
+            "type": "object",
+            "properties": {
+                "answer_count": {
+                    "type": "integer"
+                },
+                "author_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "author_name": {
+                    "type": "string"
+                },
+                "comment_count": {
+                    "type": "integer"
+                },
+                "create_time": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "follower_count": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "topics": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TopicBrief"
+                    }
+                },
+                "view_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AuthUser": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "bio": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.CommentDetailPage": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ApiCommentDetail"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
         "models.Community": {
             "type": "object",
             "properties": {
@@ -524,6 +2493,249 @@
                 }
             }
         },
+        "models.FeedAuthor": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "description": "已是字符串，不加 ,string（避免双重引号）",
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.FeedItem": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/models.FeedAuthor"
+                },
+                "create_time": {
+                    "type": "string"
+                },
+                "excerpt": {
+                    "type": "string"
+                },
+                "item_id": {
+                    "description": "已是字符串，不加 ,string（避免双重引号）",
+                    "type": "string"
+                },
+                "item_type": {
+                    "description": "question | answer",
+                    "type": "string"
+                },
+                "question_id": {
+                    "type": "string"
+                },
+                "stats": {
+                    "$ref": "#/definitions/models.FeedStats"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "topic": {
+                    "$ref": "#/definitions/models.TopicBrief"
+                }
+            }
+        },
+        "models.FeedItemPage": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.FeedItem"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.FeedStats": {
+            "type": "object",
+            "properties": {
+                "answer_count": {
+                    "type": "integer"
+                },
+                "collect_count": {
+                    "type": "integer"
+                },
+                "comment_count": {
+                    "type": "integer"
+                },
+                "vote_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.NotificationDetailPage": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ApiNotificationDetail"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ParamBindEmail": {
+            "type": "object",
+            "required": [
+                "code",
+                "email"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ParamCreateAnswer": {
+            "type": "object",
+            "required": [
+                "content"
+            ],
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "maxLength": 20000,
+                    "minLength": 1
+                }
+            }
+        },
+        "models.ParamCreateComment": {
+            "type": "object",
+            "required": [
+                "content",
+                "target_id",
+                "target_type"
+            ],
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "minLength": 1
+                },
+                "parent_id": {
+                    "type": "string"
+                },
+                "target_id": {
+                    "type": "string"
+                },
+                "target_type": {
+                    "type": "string",
+                    "enum": [
+                        "answer",
+                        "question"
+                    ]
+                }
+            }
+        },
+        "models.ParamCreateQuestion": {
+            "type": "object",
+            "required": [
+                "title"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "maxLength": 10000
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 5
+                },
+                "topic_ids": {
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.ParamCreateTopic": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
+                }
+            }
+        },
+        "models.ParamEmailLogin": {
+            "type": "object",
+            "required": [
+                "email",
+                "password"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ParamEmailRegister": {
+            "type": "object",
+            "required": [
+                "code",
+                "email",
+                "password",
+                "re_password",
+                "username"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 8
+                },
+                "re_password": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 2
+                }
+            }
+        },
         "models.ParamLogin": {
             "type": "object",
             "required": [
@@ -536,6 +2748,48 @@
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "models.ParamResetWithToken": {
+            "type": "object",
+            "required": [
+                "password",
+                "re_password",
+                "reset_token"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 8
+                },
+                "re_password": {
+                    "type": "string"
+                },
+                "reset_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ParamSendCode": {
+            "type": "object",
+            "required": [
+                "email",
+                "purpose"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "purpose": {
+                    "type": "string",
+                    "enum": [
+                        "register",
+                        "login",
+                        "reset_password",
+                        "bind_email"
+                    ]
                 }
             }
         },
@@ -555,6 +2809,82 @@
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "models.ParamUpdateAnswer": {
+            "type": "object",
+            "required": [
+                "content"
+            ],
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "maxLength": 20000,
+                    "minLength": 1
+                }
+            }
+        },
+        "models.ParamUpdateProfile": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "bio": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 2
+                }
+            }
+        },
+        "models.ParamUpdateQuestion": {
+            "type": "object",
+            "required": [
+                "title"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "maxLength": 10000
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 1
+                }
+            }
+        },
+        "models.ParamVerifyResetCode": {
+            "type": "object",
+            "required": [
+                "code",
+                "email"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ParamVoteAnswer": {
+            "type": "object",
+            "properties": {
+                "direction": {
+                    "type": "integer",
+                    "enum": [
+                        1,
+                        0,
+                        -1
+                    ]
                 }
             }
         },
@@ -589,6 +2919,79 @@
                 },
                 "title": {
                     "type": "string"
+                }
+            }
+        },
+        "models.Question": {
+            "type": "object",
+            "properties": {
+                "answer_count": {
+                    "type": "integer"
+                },
+                "author_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "comment_count": {
+                    "type": "integer"
+                },
+                "create_time": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "follower_count": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "view_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.Topic": {
+            "type": "object",
+            "properties": {
+                "avatar_url": {
+                    "type": "string"
+                },
+                "create_time": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "follower_count": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "topic_id": {
+                    "type": "string",
+                    "example": "0"
+                }
+            }
+        },
+        "models.TopicBrief": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "topic_id": {
+                    "type": "string",
+                    "example": ""
                 }
             }
         },

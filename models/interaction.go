@@ -105,3 +105,33 @@ type FeedItem struct {
 	Stats      FeedStats  `json:"stats"`
 	CreateTime time.Time  `json:"create_time"`
 }
+
+// ---------- Swagger 文档用具体分页类型（swag CLI 对泛型解析有限制） ----------
+
+// FeedItemPage Feed 分页响应
+type FeedItemPage struct {
+	Items      []*FeedItem `json:"items"`
+	NextCursor string      `json:"next_cursor"`
+	HasMore    bool        `json:"has_more"`
+}
+
+// AnswerDetailPage 回答分页响应
+type AnswerDetailPage struct {
+	Items      []*ApiAnswerDetail `json:"items"`
+	NextCursor string             `json:"next_cursor"`
+	HasMore    bool               `json:"has_more"`
+}
+
+// CommentDetailPage 评论分页响应
+type CommentDetailPage struct {
+	Items      []*ApiCommentDetail `json:"items"`
+	NextCursor string              `json:"next_cursor"`
+	HasMore    bool                `json:"has_more"`
+}
+
+// NotificationDetailPage 通知分页响应
+type NotificationDetailPage struct {
+	Items      []*ApiNotificationDetail `json:"items"`
+	NextCursor string                   `json:"next_cursor"`
+	HasMore    bool                     `json:"has_more"`
+}

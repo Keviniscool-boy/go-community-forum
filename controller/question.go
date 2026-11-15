@@ -81,7 +81,7 @@ func GetQuestionDetailHandler(c *gin.Context) {
 // @Param cursor query string false "分页游标（首页不传）"
 // @Param limit query int false "每页数量，默认 20，最大 50"
 // @Param order query string false "排序：latest 最新（默认）| hot 热门"
-// @Success 200 {object} controller.Response{data=models.PageResult}
+// @Success 200 {object} controller.Response{data=models.AnswerDetailPage}
 // @Router /questions/{id}/answers [get]
 func ListAnswersHandler(c *gin.Context) {
 	questionID, err := strconv.ParseInt(c.Param("id"), 10, 64)

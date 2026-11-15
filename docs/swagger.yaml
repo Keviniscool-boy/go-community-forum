@@ -1,5 +1,12 @@
 basePath: /api/v1
 definitions:
+  controller.AuthResponse:
+    properties:
+      token:
+        type: string
+      user:
+        $ref: '#/definitions/models.AuthUser'
+    type: object
   controller.LoginResponse:
     properties:
       token:
@@ -20,7 +27,22 @@ definitions:
     - 1010
     - 1011
     - 1012
-    format: int64
+    - 1013
+    - 1014
+    - 1015
+    - 1016
+    - 1017
+    - 1018
+    - 1019
+    - 1020
+    - 1021
+    - 1022
+    - 1023
+    - 1024
+    - 1025
+    - 1026
+    - 1027
+    - 1028
     type: integer
     x-enum-varnames:
     - CodeSuccess
@@ -36,12 +58,145 @@ definitions:
     - CodeNeedLogin
     - CodeVoteTimeExpire
     - CodeRepeatedVote
+    - CodeEmailExist
+    - CodeEmailNotExist
+    - CodeSendTooFrequent
+    - CodeVerifyCodeInvalid
+    - CodeAccountBanned
+    - CodeQuestionNotExist
+    - CodeAnswerNotExist
+    - CodeTopicExist
+    - CodeRegisterFailed
+    - CodeSendCodeFailed
+    - CodeVerifyCodeLocked
+    - CodeFeedRefreshing
+    - CodeFeedExpired
+    - CodeForbidden
+    - CodeResetTokenInvalid
+    - CodeEmailConflict
   controller.Response:
     properties:
       code:
         $ref: '#/definitions/controller.ResCode'
       data: {}
       msg: {}
+    type: object
+  logic.ApiUserProfile:
+    properties:
+      answer_count:
+        type: integer
+      avatar_url:
+        type: string
+      bio:
+        type: string
+      follower_count:
+        type: integer
+      following_count:
+        type: integer
+      is_following:
+        type: boolean
+      question_count:
+        type: integer
+      user_id:
+        example: ""
+        type: string
+      username:
+        type: string
+    type: object
+  models.AnswerDetailPage:
+    properties:
+      has_more:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/models.ApiAnswerDetail'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  models.ApiAnswerDetail:
+    properties:
+      author_id:
+        example: "0"
+        type: string
+      author_name:
+        type: string
+      collect_count:
+        type: integer
+      comment_count:
+        type: integer
+      content:
+        type: string
+      create_time:
+        type: string
+      id:
+        example: "0"
+        type: string
+      question_id:
+        example: "0"
+        type: string
+      question_title:
+        type: string
+      status:
+        type: integer
+      vote_count:
+        type: integer
+    required:
+    - content
+    type: object
+  models.ApiCommentDetail:
+    properties:
+      avatar_url:
+        type: string
+      content:
+        type: string
+      create_time:
+        type: string
+      id:
+        example: "0"
+        type: string
+      parent_id:
+        example: "0"
+        type: string
+      status:
+        type: integer
+      target_id:
+        example: "0"
+        type: string
+      target_type:
+        type: integer
+      user_id:
+        example: "0"
+        type: string
+      username:
+        type: string
+    type: object
+  models.ApiNotificationDetail:
+    properties:
+      actor_id:
+        example: "0"
+        type: string
+      actor_name:
+        type: string
+      create_time:
+        type: string
+      excerpt:
+        type: string
+      id:
+        example: "0"
+        type: string
+      is_read:
+        type: boolean
+      target_id:
+        example: "0"
+        type: string
+      target_type:
+        type: integer
+      type:
+        type: integer
+      user_id:
+        example: "0"
+        type: string
     type: object
   models.ApiPostDetail:
     properties:
@@ -73,6 +228,61 @@ definitions:
     - content
     - title
     type: object
+  models.ApiQuestionDetail:
+    properties:
+      answer_count:
+        type: integer
+      author_id:
+        example: "0"
+        type: string
+      author_name:
+        type: string
+      comment_count:
+        type: integer
+      create_time:
+        type: string
+      description:
+        type: string
+      follower_count:
+        type: integer
+      id:
+        example: "0"
+        type: string
+      status:
+        type: integer
+      title:
+        type: string
+      topics:
+        items:
+          $ref: '#/definitions/models.TopicBrief'
+        type: array
+      view_count:
+        type: integer
+    type: object
+  models.AuthUser:
+    properties:
+      avatar_url:
+        type: string
+      bio:
+        type: string
+      email:
+        type: string
+      user_id:
+        type: string
+      username:
+        type: string
+    type: object
+  models.CommentDetailPage:
+    properties:
+      has_more:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/models.ApiCommentDetail'
+        type: array
+      next_cursor:
+        type: string
+    type: object
   models.Community:
     properties:
       id:
@@ -93,6 +303,173 @@ definitions:
       name:
         type: string
     type: object
+  models.FeedAuthor:
+    properties:
+      avatar_url:
+        type: string
+      user_id:
+        description: 已是字符串，不加 ,string（避免双重引号）
+        type: string
+      username:
+        type: string
+    type: object
+  models.FeedItem:
+    properties:
+      author:
+        $ref: '#/definitions/models.FeedAuthor'
+      create_time:
+        type: string
+      excerpt:
+        type: string
+      item_id:
+        description: 已是字符串，不加 ,string（避免双重引号）
+        type: string
+      item_type:
+        description: question | answer
+        type: string
+      question_id:
+        type: string
+      stats:
+        $ref: '#/definitions/models.FeedStats'
+      title:
+        type: string
+      topic:
+        $ref: '#/definitions/models.TopicBrief'
+    type: object
+  models.FeedItemPage:
+    properties:
+      has_more:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/models.FeedItem'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  models.FeedStats:
+    properties:
+      answer_count:
+        type: integer
+      collect_count:
+        type: integer
+      comment_count:
+        type: integer
+      vote_count:
+        type: integer
+    type: object
+  models.NotificationDetailPage:
+    properties:
+      has_more:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/models.ApiNotificationDetail'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  models.ParamBindEmail:
+    properties:
+      code:
+        type: string
+      email:
+        type: string
+    required:
+    - code
+    - email
+    type: object
+  models.ParamCreateAnswer:
+    properties:
+      content:
+        maxLength: 20000
+        minLength: 1
+        type: string
+    required:
+    - content
+    type: object
+  models.ParamCreateComment:
+    properties:
+      content:
+        maxLength: 2000
+        minLength: 1
+        type: string
+      parent_id:
+        type: string
+      target_id:
+        type: string
+      target_type:
+        enum:
+        - answer
+        - question
+        type: string
+    required:
+    - content
+    - target_id
+    - target_type
+    type: object
+  models.ParamCreateQuestion:
+    properties:
+      description:
+        maxLength: 10000
+        type: string
+      title:
+        maxLength: 200
+        minLength: 5
+        type: string
+      topic_ids:
+        items:
+          type: string
+        maxItems: 5
+        type: array
+    required:
+    - title
+    type: object
+  models.ParamCreateTopic:
+    properties:
+      description:
+        maxLength: 500
+        type: string
+      name:
+        maxLength: 64
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  models.ParamEmailLogin:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  models.ParamEmailRegister:
+    properties:
+      code:
+        type: string
+      email:
+        type: string
+      password:
+        maxLength: 64
+        minLength: 8
+        type: string
+      re_password:
+        type: string
+      username:
+        maxLength: 32
+        minLength: 2
+        type: string
+    required:
+    - code
+    - email
+    - password
+    - re_password
+    - username
+    type: object
   models.ParamLogin:
     properties:
       password:
@@ -102,6 +479,36 @@ definitions:
     required:
     - password
     - username
+    type: object
+  models.ParamResetWithToken:
+    properties:
+      password:
+        maxLength: 64
+        minLength: 8
+        type: string
+      re_password:
+        type: string
+      reset_token:
+        type: string
+    required:
+    - password
+    - re_password
+    - reset_token
+    type: object
+  models.ParamSendCode:
+    properties:
+      email:
+        type: string
+      purpose:
+        enum:
+        - register
+        - login
+        - reset_password
+        - bind_email
+        type: string
+    required:
+    - email
+    - purpose
     type: object
   models.ParamSignUp:
     properties:
@@ -115,6 +522,59 @@ definitions:
     - password
     - re_password
     - username
+    type: object
+  models.ParamUpdateAnswer:
+    properties:
+      content:
+        maxLength: 20000
+        minLength: 1
+        type: string
+    required:
+    - content
+    type: object
+  models.ParamUpdateProfile:
+    properties:
+      avatar_url:
+        maxLength: 500
+        type: string
+      bio:
+        maxLength: 500
+        type: string
+      username:
+        maxLength: 32
+        minLength: 2
+        type: string
+    type: object
+  models.ParamUpdateQuestion:
+    properties:
+      description:
+        maxLength: 10000
+        type: string
+      title:
+        maxLength: 200
+        minLength: 1
+        type: string
+    required:
+    - title
+    type: object
+  models.ParamVerifyResetCode:
+    properties:
+      code:
+        type: string
+      email:
+        type: string
+    required:
+    - code
+    - email
+    type: object
+  models.ParamVoteAnswer:
+    properties:
+      direction:
+        enum:
+        - 1
+        - 0
+        - -1
+        type: integer
     type: object
   models.Post:
     properties:
@@ -139,6 +599,55 @@ definitions:
     - community_id
     - content
     - title
+    type: object
+  models.Question:
+    properties:
+      answer_count:
+        type: integer
+      author_id:
+        example: "0"
+        type: string
+      comment_count:
+        type: integer
+      create_time:
+        type: string
+      description:
+        type: string
+      follower_count:
+        type: integer
+      id:
+        example: "0"
+        type: string
+      status:
+        type: integer
+      title:
+        type: string
+      view_count:
+        type: integer
+    type: object
+  models.Topic:
+    properties:
+      avatar_url:
+        type: string
+      create_time:
+        type: string
+      description:
+        type: string
+      follower_count:
+        type: integer
+      name:
+        type: string
+      topic_id:
+        example: "0"
+        type: string
+    type: object
+  models.TopicBrief:
+    properties:
+      name:
+        type: string
+      topic_id:
+        example: ""
+        type: string
     type: object
   models.VoteData:
     properties:
@@ -171,6 +680,451 @@ info:
   title: bluebell 项目接口文档
   version: "1.0"
 paths:
+  /answers/{answer_id}:
+    delete:
+      description: 仅作者可删除，软删除后问题的回答数自动重算
+      parameters:
+      - description: 回答 ID
+        in: path
+        name: answer_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 删除回答
+      tags:
+      - 问答相关接口
+    put:
+      consumes:
+      - application/json
+      description: 仅作者可编辑回答内容
+      parameters:
+      - description: 回答 ID
+        in: path
+        name: answer_id
+        required: true
+        type: integer
+      - description: 更新参数
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamUpdateAnswer'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 编辑回答
+      tags:
+      - 问答相关接口
+  /answers/{id}/collect:
+    delete:
+      parameters:
+      - description: 回答 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 取消收藏回答
+      tags:
+      - 互动相关接口
+    post:
+      parameters:
+      - description: 回答 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 收藏回答
+      tags:
+      - 互动相关接口
+  /answers/{id}/interactions:
+    get:
+      parameters:
+      - description: 回答 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+      summary: 回答互动状态
+      tags:
+      - 互动相关接口
+  /answers/{id}/vote:
+    post:
+      consumes:
+      - application/json
+      description: 对回答投票：direction=1 赞同，-1 反对，0 取消；幂等
+      parameters:
+      - description: 回答 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 投票方向
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamVoteAnswer'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 回答投票
+      tags:
+      - 互动相关接口
+  /auth/email/bind:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        登录用户使用 bind_email 验证码绑定真实邮箱；占位邮箱的旧账号通过此流程完成迁移。
+        成功后撤销所有旧会话，需重新登录；邮箱被他人占用返回明确错误
+      parameters:
+      - description: 邮箱与验证码
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamBindEmail'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 绑定邮箱
+      tags:
+      - 认证相关接口
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: 使用邮箱和密码登录，返回 token 和用户信息
+      parameters:
+      - description: 登录参数
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamEmailLogin'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/controller.AuthResponse'
+              type: object
+      summary: 邮箱登录
+      tags:
+      - 认证相关接口
+  /auth/logout-all:
+    post:
+      description: 递增 token_version，撤销当前用户所有已签发 token
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 退出所有设备
+      tags:
+      - 认证相关接口
+  /auth/me:
+    get:
+      description: 获取当前登录用户的基本信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.AuthUser'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 当前用户信息
+      tags:
+      - 认证相关接口
+  /auth/password/reset:
+    post:
+      consumes:
+      - application/json
+      description: 凭据单次消费（重复使用失败），改密与撤销所有旧会话同事务完成
+      parameters:
+      - description: 重置凭据与新密码
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamResetWithToken'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      summary: 找回密码：凭据设置新密码
+      tags:
+      - 认证相关接口
+  /auth/password/reset/verify:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        校验 reset_password 验证码，返回一次性、短时效的 reset_token；
+        凭据明文仅本次响应可见，服务端只存摘要
+      parameters:
+      - description: 邮箱与验证码
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamVerifyResetCode'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+      summary: 找回密码：验证码换重置凭据
+      tags:
+      - 认证相关接口
+  /auth/profile:
+    put:
+      consumes:
+      - application/json
+      description: 更新当前登录用户的简介与头像地址
+      parameters:
+      - description: 资料参数
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamUpdateProfile'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 更新个人资料
+      tags:
+      - 认证相关接口
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: 使用邮箱验证码注册账号，成功直接返回 token 和用户信息
+      parameters:
+      - description: 注册参数
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamEmailRegister'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/controller.AuthResponse'
+              type: object
+      summary: 邮箱注册
+      tags:
+      - 认证相关接口
+  /auth/send-code:
+    post:
+      consumes:
+      - application/json
+      description: 向指定邮箱发送验证码，用于注册/登录/找回密码
+      parameters:
+      - description: 邮箱和用途
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamSendCode'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      summary: 发送邮箱验证码
+      tags:
+      - 认证相关接口
+  /auth/send-code/bind:
+    post:
+      consumes:
+      - application/json
+      description: 仅登录用户可发送；绑定流程专用验证码
+      parameters:
+      - description: 邮箱与用途（bind_email）
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamSendCode'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 发送绑定邮箱验证码
+      tags:
+      - 认证相关接口
+  /comments:
+    get:
+      description: 按 cursor 分页查询目标的评论
+      parameters:
+      - description: 目标类型：answer | question
+        in: query
+        name: target_type
+        required: true
+        type: string
+      - description: 目标 ID
+        in: query
+        name: target_id
+        required: true
+        type: string
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - description: 数量，默认 20，最大 50
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.CommentDetailPage'
+              type: object
+      summary: 评论列表
+      tags:
+      - 评论相关接口
+    post:
+      consumes:
+      - application/json
+      description: 对回答或问题发表评论，需登录
+      parameters:
+      - description: 评论参数
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamCreateComment'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 创建评论
+      tags:
+      - 评论相关接口
   /community:
     get:
       description: 查询所有社区（id、name）列表
@@ -215,6 +1169,35 @@ paths:
       summary: 社区详情
       tags:
       - 社区相关接口
+  /feed/recommend:
+    get:
+      description: |-
+        推荐流（/feed/recommend）、最新流（/feed/latest）、热榜（/feed/hot）为公开接口；
+        关注流（/feed/following）需登录；全部使用 cursor 分页
+      parameters:
+      - description: 分页游标（首页不传）
+        in: query
+        name: cursor
+        type: string
+      - description: 数量，默认 20，最大 50
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.FeedItemPage'
+              type: object
+      summary: Feed 流
+      tags:
+      - Feed 相关接口
   /login:
     post:
       consumes:
@@ -242,6 +1225,69 @@ paths:
       summary: 用户登录
       tags:
       - 用户相关接口
+  /notifications:
+    get:
+      parameters:
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - description: 数量，默认 20，最大 50
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.NotificationDetailPage'
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 通知列表
+      tags:
+      - 通知相关接口
+  /notifications/read-all:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 全部通知标记已读
+      tags:
+      - 通知相关接口
+  /notifications/unread-count:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: integer
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 未读通知数
+      tags:
+      - 通知相关接口
   /post:
     post:
       consumes:
@@ -352,6 +1398,244 @@ paths:
       summary: 帖子列表（排序）
       tags:
       - 帖子相关接口
+  /questions:
+    post:
+      consumes:
+      - application/json
+      description: 发布新问题，需登录
+      parameters:
+      - description: 问题参数
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamCreateQuestion'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 创建问题
+      tags:
+      - 问答相关接口
+  /questions/{id}:
+    delete:
+      description: 仅作者可删除，软删除后 Feed 与详情不再展示
+      parameters:
+      - description: 问题 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 删除问题
+      tags:
+      - 问答相关接口
+    get:
+      description: 根据问题 ID 查询问题详情（含作者名、话题）
+      parameters:
+      - description: 问题 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.ApiQuestionDetail'
+              type: object
+      summary: 问题详情
+      tags:
+      - 问答相关接口
+    put:
+      consumes:
+      - application/json
+      description: 仅作者可编辑问题标题与补充说明
+      parameters:
+      - description: 问题 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 更新参数
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamUpdateQuestion'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 编辑问题
+      tags:
+      - 问答相关接口
+  /questions/{id}/answers:
+    get:
+      description: 按 cursor 分页查询问题下的回答，支持 hot / latest 排序
+      parameters:
+      - description: 问题 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 分页游标（首页不传）
+        in: query
+        name: cursor
+        type: string
+      - description: 每页数量，默认 20，最大 50
+        in: query
+        name: limit
+        type: integer
+      - description: 排序：latest 最新（默认）| hot 热门
+        in: query
+        name: order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.AnswerDetailPage'
+              type: object
+      summary: 回答列表
+      tags:
+      - 问答相关接口
+    post:
+      consumes:
+      - application/json
+      description: 在指定问题下发布回答，需登录
+      parameters:
+      - description: 问题 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 回答参数
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamCreateAnswer'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 创建回答
+      tags:
+      - 问答相关接口
+  /questions/{id}/follow:
+    delete:
+      parameters:
+      - description: 问题 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 取消关注问题
+      tags:
+      - 互动相关接口
+    post:
+      parameters:
+      - description: 问题 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 关注问题
+      tags:
+      - 互动相关接口
+  /questions/{id}/interactions:
+    get:
+      parameters:
+      - description: 问题 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: boolean
+                  type: object
+              type: object
+      summary: 问题互动状态
+      tags:
+      - 互动相关接口
   /signup:
     post:
       consumes:
@@ -372,6 +1656,236 @@ paths:
           schema:
             $ref: '#/definitions/controller.Response'
       summary: 用户注册
+      tags:
+      - 用户相关接口
+  /topics:
+    get:
+      parameters:
+      - description: 数量，默认 20，最大 50
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.Topic'
+                  type: array
+              type: object
+      summary: 话题列表
+      tags:
+      - 话题相关接口
+    post:
+      consumes:
+      - application/json
+      description: 创建新话题，需登录，名称唯一
+      parameters:
+      - description: 话题参数
+        in: body
+        name: object
+        required: true
+        schema:
+          $ref: '#/definitions/models.ParamCreateTopic'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 创建话题
+      tags:
+      - 话题相关接口
+  /topics/{id}:
+    get:
+      parameters:
+      - description: 话题 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Topic'
+              type: object
+      summary: 话题详情
+      tags:
+      - 话题相关接口
+  /topics/{id}/follow:
+    delete:
+      parameters:
+      - description: 话题 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 取消关注话题
+      tags:
+      - 话题相关接口
+    post:
+      parameters:
+      - description: 话题 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 关注话题
+      tags:
+      - 话题相关接口
+  /users/{id}:
+    get:
+      description: 用户基本信息、内容统计与当前用户的关注关系
+      parameters:
+      - description: 用户 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/logic.ApiUserProfile'
+              type: object
+      summary: 用户主页
+      tags:
+      - 用户相关接口
+  /users/{id}/answers:
+    get:
+      parameters:
+      - description: 用户 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.ApiAnswerDetail'
+                  type: array
+              type: object
+      summary: 用户回答列表
+      tags:
+      - 用户相关接口
+  /users/{id}/follow:
+    delete:
+      parameters:
+      - description: 目标用户 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 取消关注
+      tags:
+      - 互动相关接口
+    post:
+      description: 关注指定用户，需登录，幂等
+      parameters:
+      - description: 目标用户 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 关注用户
+      tags:
+      - 互动相关接口
+  /users/{id}/questions:
+    get:
+      parameters:
+      - description: 用户 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.Question'
+                  type: array
+              type: object
+      summary: 用户提问列表
       tags:
       - 用户相关接口
   /vote:
