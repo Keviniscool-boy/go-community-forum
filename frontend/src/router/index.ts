@@ -10,7 +10,9 @@ const router = createRouter({
       children: [
         { path: '', name: 'home', component: () => import('@/views/HomeView.vue'), meta: { title: '首页' } },
         { path: 'post/:id', name: 'post-detail', component: () => import('@/views/PostDetailView.vue'), meta: { title: '帖子详情' } },
-        { path: 'ask', name: 'ask', component: () => import('@/views/AskView.vue'), meta: { title: '发布帖子', requiresAuth: true } },
+        { path: 'questions/ask', name: 'ask-question', component: () => import('@/views/AskQuestionView.vue'), meta: { title: '提问', requiresAuth: true } },
+        { path: 'questions/:id', name: 'question-detail', component: () => import('@/views/QuestionDetailView.vue'), meta: { title: '问题详情' } },
+        { path: 'ask', redirect: { name: 'ask-question' } },
         // M5 上线的页面，先占位
         { path: 'users/:id', name: 'user-profile', component: () => import('@/views/PlaceholderView.vue'), meta: { title: '用户主页' } },
       ],

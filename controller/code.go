@@ -24,6 +24,9 @@ const (
 	CodeSendTooFrequent
 	CodeVerifyCodeInvalid
 	CodeAccountBanned
+
+	CodeQuestionNotExist
+	CodeAnswerNotExist
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -45,6 +48,8 @@ var codeMsgMap = map[ResCode]string{
 	CodeSendTooFrequent:    "发送过于频繁，请稍后再试",
 	CodeVerifyCodeInvalid:  "验证码错误或已过期",
 	CodeAccountBanned:      "账号已被禁用",
+	CodeQuestionNotExist:   "问题不存在",
+	CodeAnswerNotExist:     "回答不存在",
 }
 
 // 创建一个函数，传入code返回msg

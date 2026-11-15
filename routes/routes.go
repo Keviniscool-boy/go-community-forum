@@ -37,6 +37,12 @@ func Setup() *gin.Engine {
 	auth.POST("/register", controller.RegisterHandler)
 	auth.POST("/login", controller.EmailLoginHandler)
 	auth.GET("/me", middlewares.JWTAuthMiddleware(), controller.MeHandler)
+
+	// 问答相关路由
+	v1.POST("/questions", middlewares.JWTAuthMiddleware(), controller.CreateQuestionHandler)
+	v1.GET("/questions/:id", controller.GetQuestionDetailHandler)
+	v1.POST("/questions/:question_id/answers", middlewares.JWTAuthMiddleware(), controller.CreateAnswerHandler)
+	v1.GET("/questions/:question_id/answers", controller.ListAnswersHandler)
 	//jwt中间件
 	v1.GET("/ping", middlewares.JWTAuthMiddleware(), func(c *gin.Context) {
 		//如果是已经登录的用户，判断请求头中是否携带了token

@@ -20,8 +20,8 @@ const isMobileSidebarVisible = ref(false)
           <router-link class="side-link" to="/">
             <el-icon><HomeFilled /></el-icon><span>首页</span>
           </router-link>
-          <router-link class="side-link" to="/ask">
-            <el-icon><EditPen /></el-icon><span>发布</span>
+          <router-link class="side-link" to="/questions/ask">
+            <el-icon><EditPen /></el-icon><span>提问</span>
           </router-link>
         </nav>
         <div v-if="!auth.isLoggedIn" class="side-login-tip">

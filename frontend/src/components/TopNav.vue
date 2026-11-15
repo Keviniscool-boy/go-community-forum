@@ -50,7 +50,7 @@ function onAvatarCommand(command: string) {
         @keyup.enter="onSearch"
       />
       <div class="nav-actions">
-        <el-button type="primary" size="small" round @click="router.push('/ask')">发布</el-button>
+        <el-button type="primary" size="small" round @click="router.push('/questions/ask')">提问</el-button>
         <template v-if="auth.isLoggedIn && auth.user">
           <el-dropdown trigger="click" @command="onAvatarCommand">
             <el-avatar :size="32" :src="auth.user.avatar_url || defaultAvatar" />
