@@ -80,7 +80,7 @@ type ApiNotificationDetail struct {
 
 // FeedAuthor Feed 条目的作者信息
 type FeedAuthor struct {
-	UserID    string `json:"user_id,string"`
+	UserID    string `json:"user_id"` // 已是字符串，不加 ,string（避免双重引号）
 	Username  string `json:"username"`
 	AvatarURL string `json:"avatar_url"`
 }
@@ -96,8 +96,8 @@ type FeedStats struct {
 // FeedItem Feed 流条目（问题或回答）
 type FeedItem struct {
 	ItemType   string     `json:"item_type"` // question | answer
-	ItemID     string     `json:"item_id,string"`
-	QuestionID string     `json:"question_id,string,omitempty"`
+	ItemID     string     `json:"item_id"`   // 已是字符串，不加 ,string（避免双重引号）
+	QuestionID string     `json:"question_id,omitempty"`
 	Title      string     `json:"title"`
 	Excerpt    string     `json:"excerpt"`
 	Author     FeedAuthor `json:"author"`

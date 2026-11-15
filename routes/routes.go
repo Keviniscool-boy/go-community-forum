@@ -41,15 +41,15 @@ func Setup() *gin.Engine {
 	// 问答相关路由
 	v1.POST("/questions", middlewares.JWTAuthMiddleware(), controller.CreateQuestionHandler)
 	v1.GET("/questions/:id", controller.GetQuestionDetailHandler)
-	v1.POST("/questions/:question_id/answers", middlewares.JWTAuthMiddleware(), controller.CreateAnswerHandler)
-	v1.GET("/questions/:question_id/answers", controller.ListAnswersHandler)
+	v1.POST("/questions/:id/answers", middlewares.JWTAuthMiddleware(), controller.CreateAnswerHandler)
+	v1.GET("/questions/:id/answers", controller.ListAnswersHandler)
 
 	// Feed 相关路由（following 需登录，其余公开）
 	v1.GET("/feed/:type", controller.GetFeedHandler)
 
 	// 互动相关路由
-	v1.POST("/users/:user_id/follow", middlewares.JWTAuthMiddleware(), controller.FollowUserHandler)
-	v1.DELETE("/users/:user_id/follow", middlewares.JWTAuthMiddleware(), controller.UnfollowUserHandler)
+	v1.POST("/users/:id/follow", middlewares.JWTAuthMiddleware(), controller.FollowUserHandler)
+	v1.DELETE("/users/:id/follow", middlewares.JWTAuthMiddleware(), controller.UnfollowUserHandler)
 	v1.POST("/answers/:answer_id/vote", middlewares.JWTAuthMiddleware(), controller.VoteAnswerHandler)
 	v1.POST("/answers/:answer_id/collect", middlewares.JWTAuthMiddleware(), controller.CollectAnswerHandler)
 	v1.DELETE("/answers/:answer_id/collect", middlewares.JWTAuthMiddleware(), controller.UncollectAnswerHandler)

@@ -7,7 +7,7 @@ import (
 
 // Feed 缓存 key
 const (
-	keyFeedHotCache = "feed:hot:v1" // 热榜/推荐流缓存：装配好的条目 JSON，TTL 10 分钟
+	keyFeedHotCache = "feed:hot:v2" // 热榜/推荐流缓存：装配好的条目 JSON，TTL 10 分钟（结构变更时递增版本）
 	feedCacheTTL    = 10 * time.Minute
 )
 

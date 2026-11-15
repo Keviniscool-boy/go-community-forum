@@ -77,14 +77,14 @@ func GetQuestionDetailHandler(c *gin.Context) {
 // @Description 按 cursor 分页查询问题下的回答，支持 hot / latest 排序
 // @Tags 问答相关接口
 // @Produce json
-// @Param question_id path int true "问题 ID"
+// @Param id path int true "问题 ID"
 // @Param cursor query string false "分页游标（首页不传）"
 // @Param limit query int false "每页数量，默认 20，最大 50"
 // @Param order query string false "排序：latest 最新（默认）| hot 热门"
 // @Success 200 {object} controller.Response{data=models.PageResult[models.ApiAnswerDetail]}
-// @Router /questions/{question_id}/answers [get]
+// @Router /questions/{id}/answers [get]
 func ListAnswersHandler(c *gin.Context) {
-	questionID, err := strconv.ParseInt(c.Param("question_id"), 10, 64)
+	questionID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		ResponseError(c, CodeInvalidParams)
 		return
@@ -114,12 +114,12 @@ func ListAnswersHandler(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
-// @Param question_id path int true "问题 ID"
+// @Param id path int true "问题 ID"
 // @Param object body models.ParamCreateAnswer true "回答参数"
 // @Success 200 {object} controller.Response{data=map[string]string}
-// @Router /questions/{question_id}/answers [post]
+// @Router /questions/{id}/answers [post]
 func CreateAnswerHandler(c *gin.Context) {
-	questionID, err := strconv.ParseInt(c.Param("question_id"), 10, 64)
+	questionID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		ResponseError(c, CodeInvalidParams)
 		return

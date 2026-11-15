@@ -27,11 +27,11 @@ func tryGetUserID(c *gin.Context) int64 {
 // @Tags 互动相关接口
 // @Produce json
 // @Security ApiKeyAuth
-// @Param user_id path int true "目标用户 ID"
+// @Param id path int true "目标用户 ID"
 // @Success 200 {object} controller.Response
-// @Router /users/{user_id}/follow [post]
+// @Router /users/{id}/follow [post]
 func FollowUserHandler(c *gin.Context) {
-	targetID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	targetID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || targetID <= 0 {
 		ResponseError(c, CodeInvalidParams)
 		return
@@ -58,11 +58,11 @@ func FollowUserHandler(c *gin.Context) {
 // @Tags 互动相关接口
 // @Produce json
 // @Security ApiKeyAuth
-// @Param user_id path int true "目标用户 ID"
+// @Param id path int true "目标用户 ID"
 // @Success 200 {object} controller.Response
-// @Router /users/{user_id}/follow [delete]
+// @Router /users/{id}/follow [delete]
 func UnfollowUserHandler(c *gin.Context) {
-	targetID, err := strconv.ParseInt(c.Param("user_id"), 10, 64)
+	targetID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || targetID <= 0 {
 		ResponseError(c, CodeInvalidParams)
 		return
