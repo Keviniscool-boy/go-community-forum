@@ -2,11 +2,11 @@
 
 <div align="center">
 
-**前后端分离的社区论坛项目** —— Go + Gin 后端、Vue 2 前端，JWT 鉴权、Redis 投票排行、Swagger 文档、Docker Compose 一键部署。
+**前后端分离的知识社区项目** —— Go + Gin 后端、Vue 3 前端，邮箱注册登录、问题/回答、推荐与热榜 Feed、关注/点赞/收藏/评论、话题与通知，Swagger 文档、Docker Compose 一键部署。
 
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](go.mod)
-[![Vue Version](https://img.shields.io/badge/Vue-2.6-4FC08D.svg)](frontend/package.json)
+[![Vue Version](https://img.shields.io/badge/Vue-3.5-4FC08D.svg)](frontend/package.json)
 [![CI](https://github.com/Keviniscool-boy/go-community-forum/actions/workflows/ci.yml/badge.svg)](https://github.com/Keviniscool-boy/go-community-forum/actions/workflows/ci.yml)
 
 
@@ -20,8 +20,28 @@ Bluebell 是一个前后端分离的社区论坛项目，最初作为 Go Web 开
 
 ### 用户
 
-- 注册 / 登录，密码 bcrypt 加密存储
+- 邮箱验证码注册（注册成功直接登录）、邮箱密码登录，密码 bcrypt 加密存储
+- 验证码存 Redis（5 分钟有效），同邮箱 60 秒限发、单 IP 每小时上限
 - JWT 无状态鉴权，登录后可访问受保护接口
+- 用户主页：资料卡、提问/回答列表、关注者统计
+
+### 问答与互动
+
+- 问题（标题 + 补充说明 + 话题）与回答
+- 回答投票（赞同/反对/取消，幂等）、收藏、评论
+- 关注用户、关注问题、关注话题
+- 互动产生站内通知，支持未读数与全部已读
+
+### Feed
+
+- `/feed/recommend | /feed/latest | /feed/following | /feed/hot`，统一 cursor 游标分页（opaque cursor，前端不解析）
+- 推荐分 = 互动分（赞同×2 + 评论×3 + 收藏×4）+ 新鲜度 ×100，关注作者额外 +20
+- 热榜与推荐走 Redis 缓存（TTL 10 分钟），最新与关注流走 MySQL 时间游标
+
+### 话题
+
+- 话题列表、话题详情与话题下的问题
+- 提问时可关联话题
 
 ### 社区
 
@@ -51,7 +71,7 @@ Bluebell 是一个前后端分离的社区论坛项目，最初作为 Go Web 开
 | 后端   | Go 1.25 · Gin · sqlx · go-redis/v9 · Viper · Zap |
 | 数据   | MySQL 8.0 · Redis 7                         |
 | 鉴权/ID | JWT · Snowflake 分布式 ID                   |
-| 前端   | Vue 2 · Vue Router · Vuex · Axios · Nginx   |
+| 前端   | Vue 3 · Vite · TypeScript · Vue Router · Pinia · Element Plus |
 | 工程   | Docker Compose · Swagger · GitHub Actions   |
 
 ## 快速开始
@@ -108,7 +128,7 @@ Bluebell 是一个前后端分离的社区论坛项目，最初作为 Go Web 开
 
 1. **准备数据库**
    - 启动本地 MySQL，创建一个名为 `bluebell` 的数据库
-   - 导入表结构与示例社区数据：
+   - 导入表结构与示例社区数据（新装环境可一次建齐全部表；存量环境请按顺序执行 `models/migrations/` 下的迁移）：
 
      ```powershell
      mysql -uroot -p bluebell -e "source models/create_table.sql"
