@@ -19,7 +19,7 @@ import (
 // @Produce json
 // @Param cursor query string false "分页游标（首页不传）"
 // @Param limit query int false "数量，默认 20，最大 50"
-// @Success 200 {object} controller.Response{data=models.PageResult[models.FeedItem]}
+// @Success 200 {object} controller.Response{data=models.PageResult}
 // @Router /feed/recommend [get]
 func GetFeedHandler(c *gin.Context) {
 	feedType := c.Param("type")
