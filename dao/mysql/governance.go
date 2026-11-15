@@ -259,3 +259,72 @@ func CountTableWhere(table, where string) (int64, error) {
 	err := db.Get(&n, "SELECT COUNT(*) FROM "+table+" WHERE "+where)
 	return n, err
 }
+
+// UpsertMediaAsset 写入媒体资产（同 owner 同 hash 幂等）
+func UpsertMediaAsset(a *models.MediaAsset) error {
+	_, err := db.Exec(
+		"INSERT INTO media_asset (asset_id, owner_id, object_key, mime_type, byte_size, sha256, width, height, status) "+
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "+
+			"ON DUPLICATE KEY UPDATE object_key = VALUES(object_key), status = VALUES(status)",
+		a.AssetID, a.OwnerID, a.ObjectKey, a.MimeType, a.ByteSize, a.SHA256, a.Width, a.Height, a.Status)
+	return err
+}
+
+// ---------- 草稿 ----------
+
+// CreateDraft 创建草稿
+func CreateDraft(d *models.Draft) error {
+	_, err := db.Exec(
+		"INSERT INTO draft (draft_id, user_id, draft_type, question_id, title, content) VALUES (?, ?, ?, ?, ?, ?)",
+		d.DraftID, d.UserID, d.DraftType, d.QuestionID, d.Title, d.Content)
+	return err
+}
+
+// ListDrafts 用户草稿列表
+func ListDrafts(userID int64, draftType int32) (drafts []*models.Draft, err error) {
+	drafts = make([]*models.Draft, 0)
+	err = db.Select(&drafts,
+		"SELECT draft_id, user_id, draft_type, question_id, title, content, version, update_time FROM draft "+
+			"WHERE user_id = ? AND draft_type = ? AND deleted_at IS NULL ORDER BY update_time DESC LIMIT 100", userID, draftType)
+	return
+}
+
+// GetDraft 作者本人草稿
+func GetDraft(draftID, userID int64) (*models.Draft, error) {
+	d := new(models.Draft)
+	err := db.Get(d, "SELECT draft_id, user_id, draft_type, question_id, title, content, version, update_time FROM draft "+
+		"WHERE draft_id = ? AND user_id = ? AND deleted_at IS NULL", draftID, userID)
+	return d, err
+}
+
+// UpdateDraft 自动保存（版本号递增，带乐观锁校验；版本不匹配返回 ErrDraftConflict）
+var ErrDraftConflict = errors.New("草稿版本冲突，请刷新后重试")
+
+func UpdateDraft(draftID, userID, expectVersion int64, title, content string) (newVersion int64, err error) {
+	tx, err := db.Beginx()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	var cur int64
+	err = tx.Get(&cur, "SELECT version FROM draft WHERE draft_id = ? AND user_id = ? AND deleted_at IS NULL", draftID, userID)
+	if err != nil {
+		return 0, err
+	}
+	if cur != expectVersion {
+		return 0, ErrDraftConflict
+	}
+	if _, err = tx.Exec("UPDATE draft SET title = ?, content = ?, version = version + 1 WHERE draft_id = ?", title, content, draftID); err != nil {
+		return 0, err
+	}
+	if err = tx.Get(&newVersion, "SELECT version FROM draft WHERE draft_id = ?", draftID); err != nil {
+		return 0, err
+	}
+	return newVersion, tx.Commit()
+}
+
+// DeleteDraft 软删除草稿（本人）
+func DeleteDraft(draftID, userID int64) error {
+	_, err := db.Exec("UPDATE draft SET deleted_at = NOW() WHERE draft_id = ? AND user_id = ?", draftID, userID)
+	return err
+}

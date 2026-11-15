@@ -23,6 +23,8 @@ redis:
 snowflake:
   start_time: "2026-07-24 00:00:00"
   machine_id: 1
+storage:
+  local_root: "./uploads"  # 本地对象存储目录（生产替换 S3/MinIO）
 jwt:
   secret: "replace-with-at-least-32-random-characters"
 mail:

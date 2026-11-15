@@ -110,3 +110,76 @@ type AuditLogPage struct {
 	NextCursor string      `json:"next_cursor"`
 	HasMore    bool        `json:"has_more"`
 }
+
+// MediaAsset 媒体资产
+type MediaAsset struct {
+	AssetID   int64      `json:"asset_id,string" db:"asset_id"`
+	OwnerID   int64      `json:"owner_id,string" db:"owner_id"`
+	ObjectKey string     `json:"object_key" db:"object_key"`
+	MimeType  string     `json:"mime_type" db:"mime_type"`
+	ByteSize  int64      `json:"byte_size" db:"byte_size"`
+	SHA256    string     `json:"sha256" db:"sha256"`
+	Width     int32      `json:"width" db:"width"`
+	Height    int32      `json:"height" db:"height"`
+	Status    int32      `json:"status" db:"status"`
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
+	DeletedAt *time.Time `json:"deleted_at" db:"deleted_at"`
+}
+
+// Draft 草稿
+type Draft struct {
+	DraftID    int64      `json:"id,string" db:"draft_id"`
+	UserID     int64      `json:"user_id,string" db:"user_id"`
+	DraftType  int32      `json:"draft_type" db:"draft_type"` // 0 question 1 answer
+	QuestionID int64      `json:"question_id,string" db:"question_id"`
+	Title      string     `json:"title" db:"title"`
+	Content    string     `json:"content" db:"content"`
+	Version    int64      `json:"version" db:"version"`
+	UpdateTime time.Time  `json:"update_time" db:"update_time"`
+}
+
+// ParamSaveDraft 保存草稿请求
+type ParamSaveDraft struct {
+	DraftType  string `json:"draft_type" binding:"required,oneof=question answer"`
+	QuestionID string `json:"question_id"`
+	Title      string `json:"title" binding:"max=200"`
+	Content    string `json:"content" binding:"required,max=20000"`
+}
+
+// BookmarkFolder 收藏夹
+type BookmarkFolder struct {
+	FolderID  int64     `json:"folder_id,string" db:"folder_id"`
+	UserID    int64     `json:"user_id,string" db:"user_id"`
+	Name      string    `json:"name" db:"name"`
+	IsPrivate bool      `json:"is_private" db:"is_private"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+}
+
+// ParamCreateFolder 创建收藏夹请求
+type ParamCreateFolder struct {
+	Name string `json:"name" binding:"required,min=1,max=64"`
+}
+
+// BookmarkItem 收藏条目
+type BookmarkItem struct {
+	TargetType int32     `json:"target_type" db:"target_type"`
+	TargetID   int64     `json:"target_id,string" db:"target_id"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
+}
+
+// RecommendationEvent 推荐事件
+type RecommendationEvent struct {
+	EventID         int64   `json:"event_id,string" db:"event_id"`
+	AnonymousIDHash string  `json:"-" db:"anonymous_id_hash"`
+	UserID          int64   `json:"user_id,omitempty,string" db:"user_id"`
+	SessionIDHash   string  `json:"-" db:"session_id_hash"`
+	EventType       string  `json:"event_type" db:"event_type"`
+	ItemType        string  `json:"item_type" db:"item_type"`
+	ItemID          int64   `json:"item_id,string" db:"item_id"`
+	FeedType        string  `json:"feed_type" db:"feed_type"`
+	Position        *int    `json:"position" db:"position"`
+	RequestID       string  `json:"-" db:"request_id"`
+	MetadataStr     string  `json:"-" db:"metadata_json"`
+}
+
+// RenderMarkdownSafe logic 层包装 sanitizer（避免 controller 直接依赖 pkg 内部实现细节）

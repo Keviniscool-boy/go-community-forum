@@ -40,7 +40,7 @@ func CreateReport(reporterID int64, p *models.ParamCreateReport) (duplicated boo
 }
 
 func checkReportRateLimit(userID int64) error {
-	cnt, err := redis.IncrReportLimit(userID)
+	cnt, err := redis.IncrRateLimit("report:limit:", userID)
 	if err != nil {
 		// Redis 故障不阻塞举报（审核兜底），仅告警
 		zap.L().Error("report rate limit incr failed", zap.Error(err))

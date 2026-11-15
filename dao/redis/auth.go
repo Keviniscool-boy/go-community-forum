@@ -173,3 +173,17 @@ func IncrReportLimit(userID int64) (int64, error) {
 	}
 	return cnt, nil
 }
+
+// IncrRateLimit 通用每小时限流计数（独立 key 域），返回当前计数
+func IncrRateLimit(keyDomain string, userID int64) (int64, error) {
+	ctx := context.Background()
+	key := getRedisKey(fmt.Sprintf("%s%d", keyDomain, userID))
+	cnt, err := rdb.Incr(ctx, key).Result()
+	if err != nil {
+		return 0, err
+	}
+	if cnt == 1 {
+		rdb.Expire(ctx, key, time.Hour)
+	}
+	return cnt, nil
+}

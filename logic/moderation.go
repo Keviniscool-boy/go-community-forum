@@ -6,6 +6,7 @@ import (
 
 	"bluebell/dao/mysql"
 	"bluebell/models"
+	"bluebell/pkg/sanitizer"
 	"go.uber.org/zap"
 )
 
@@ -85,4 +86,14 @@ func CheckContentModeration(texts ...string) (ModerationDecision, error) {
 		}
 	}
 	return decision, nil
+}
+
+// RenderMarkdownSafe 安全 Markdown 渲染（服务端清洗，输出白名单 HTML）
+func RenderMarkdownSafe(markdown string) string {
+	return sanitizer.RenderMarkdown(markdown)
+}
+
+// StripMarkdownText 提取纯文本摘要
+func StripMarkdownText(markdown string) string {
+	return sanitizer.StripMarkdown(markdown)
 }

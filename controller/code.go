@@ -41,6 +41,7 @@ const (
 
 	CodeResetTokenInvalid ResCode = 1027
 	CodeEmailConflict     ResCode = 1028
+	CodeDraftConflict     ResCode = 1029
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -73,6 +74,7 @@ var codeMsgMap = map[ResCode]string{
 	CodeForbidden:          "无权操作该内容",
 	CodeResetTokenInvalid:  "重置凭据无效或已过期",
 	CodeEmailConflict:      "该邮箱已被其他账号使用",
+	CodeDraftConflict:      "草稿版本冲突，请刷新后重试",
 }
 
 // 创建一个函数，传入code返回msg

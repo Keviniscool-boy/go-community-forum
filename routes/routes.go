@@ -85,8 +85,44 @@ func Setup() *gin.Engine {
 	v1.GET("/users/:id/questions", controller.ListUserQuestionsHandler)
 	v1.GET("/users/:id/answers", controller.ListUserAnswersHandler)
 
+	// 搜索（公开，游客可搜公开内容）
+	v1.GET("/search", controller.SearchHandler)
+	v1.GET("/search/suggestions", controller.SearchSuggestionsHandler)
+
 	// 举报（登录用户）
 	v1.POST("/reports", middlewares.JWTAuthMiddleware(), controller.CreateReportHandler)
+
+	// 媒体与 Markdown（登录用户上传）
+	v1.POST("/media/upload", middlewares.JWTAuthMiddleware(), controller.UploadMediaHandler)
+	v1.GET("/media/*key", controller.MediaServeHandler)
+	v1.POST("/markdown/preview", middlewares.JWTAuthMiddleware(), controller.PreviewMarkdownHandler)
+
+	// 草稿箱（登录用户）
+	drafts := v1.Group("/drafts")
+	drafts.Use(middlewares.JWTAuthMiddleware())
+	{
+		drafts.POST("", controller.CreateDraftHandler)
+		drafts.GET("", controller.ListDraftsHandler)
+		drafts.GET("/:id", controller.GetDraftHandler)
+		drafts.PATCH("/:id", controller.UpdateDraftHandler)
+		drafts.DELETE("/:id", controller.DeleteDraftHandler)
+		drafts.POST("/:id/publish", controller.PublishDraftHandler)
+	}
+
+	// 收藏夹 / 历史（登录用户）
+	v1.GET("/bookmark-folders", middlewares.JWTAuthMiddleware(), controller.ListBookmarkFoldersHandler)
+	v1.POST("/bookmark-folders", middlewares.JWTAuthMiddleware(), controller.CreateBookmarkFolderHandler)
+	v1.DELETE("/bookmark-folders/:id", middlewares.JWTAuthMiddleware(), controller.DeleteBookmarkFolderHandler)
+	v1.GET("/bookmark-folders/:id/items", middlewares.JWTAuthMiddleware(), controller.ListBookmarkItemsHandler)
+	v1.POST("/bookmark-folders/:id/items", middlewares.JWTAuthMiddleware(), controller.AddBookmarkItemHandler)
+	v1.DELETE("/bookmark-folders/:id/items/:type/:target_id", middlewares.JWTAuthMiddleware(), controller.RemoveBookmarkItemHandler)
+	v1.GET("/history", middlewares.JWTAuthMiddleware(), controller.ListViewHistoryHandler)
+	v1.DELETE("/history", middlewares.JWTAuthMiddleware(), controller.ClearHistoryHandler)
+	v1.POST("/views", middlewares.JWTAuthMiddleware(), controller.RecordViewHandler)
+
+	// 推荐事件埋点（游客与登录用户均可；登录态注入 user_id）
+	v1.POST("/events", middlewares.OptionalAuthMiddleware(), controller.BatchReportEventsHandler)
+	v1.GET("/recommendation-version", controller.RecommendationVersionHandler)
 
 	// 管理后台（moderator/admin；封禁与配置仅 admin）
 	adminGroup := v1.Group("/admin")

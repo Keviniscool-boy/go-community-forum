@@ -16,6 +16,7 @@ import (
 	"bluebell/dao/redis"
 	"bluebell/logger"
 	"bluebell/pkg/mail"
+	"bluebell/pkg/search"
 	"bluebell/pkg/snowflake"
 	"bluebell/routes"
 	"bluebell/settings"
@@ -96,6 +97,19 @@ func main() {
 		fmt.Printf("controller.InitTrans() failed, err:%v\n", err)
 		return
 	}
+
+	// 6.04 本地对象存储（生产替换 S3/MinIO 适配器）
+	uploadsRoot := viper.GetString("storage.local_root")
+	if uploadsRoot == "" {
+		uploadsRoot = "./uploads"
+	}
+	if err := controller.InitStorage(uploadsRoot); err != nil {
+		fmt.Printf("init storage failed, err:%v\n", err)
+		return
+	}
+
+	// 6.05 搜索实现：MySQL fallback（生产可替换 ES 适配器）
+	controller.InitSearchIndex(&search.MySQLFallback{DB: mysql.GetDB()})
 
 	// 6.1 管理员初始账号：admin.user_ids（逗号分隔雪花 ID）在启动时同步角色
 	for _, idStr := range viper.GetStringSlice("admin.user_ids") {
