@@ -27,12 +27,12 @@ func requireMySQL(t *testing.T) *sqlx.DB {
 	if testDSN == "" {
 		t.Skip("BB_TEST_MYSQL_DSN not set, skip integration test")
 	}
-	db, err := sqlx.Connect("mysql", testDSN)
+	root, err := sqlx.Connect("mysql", testDSN)
 	if err != nil {
 		t.Fatalf("connect test mysql failed: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
-	return db
+	t.Cleanup(func() { root.Close() })
+	return root
 }
 
 // createTempDB 创建一个全新的临时库并返回
@@ -196,9 +196,9 @@ func TestMigrationsComposeBaselineDB(t *testing.T) {
 	}
 }
 
-func mustExec(t *testing.T, query string) {
+func mustExec(t *testing.T, query string, args ...interface{}) {
 	t.Helper()
-	if _, err := db.Exec(query); err != nil {
+	if _, err := db.Exec(query, args...); err != nil {
 		t.Fatalf("exec failed: %s: %v", firstLine(query), err)
 	}
 }

@@ -34,15 +34,15 @@ func TestTimeCursorInvalid(t *testing.T) {
 
 // TestParseOffsetCursor offset 游标边界
 func TestParseOffsetCursor(t *testing.T) {
-	if offset, err := parseOffsetCursor(""); err != nil || offset != 0 {
+	if offset, version, err := parseOffsetCursor(""); err != nil || offset != 0 || version != 0 {
 		t.Fatalf("empty cursor should be offset 0, got %d err %v", offset, err)
 	}
-	encoded := encodeOffsetCursor(40)
-	offset, err := parseOffsetCursor(encoded)
-	if err != nil || offset != 40 {
-		t.Fatalf("offset mismatch: got %d err %v", offset, err)
+	encoded := encodeOffsetCursor(40, 12345)
+	offset, version, err := parseOffsetCursor(encoded)
+	if err != nil || offset != 40 || version != 12345 {
+		t.Fatalf("offset mismatch: got %d v%d err %v", offset, version, err)
 	}
-	if _, err := parseOffsetCursor("###bad###"); err == nil {
+	if _, _, err := parseOffsetCursor("###bad###"); err == nil {
 		t.Fatal("expected error for invalid offset cursor")
 	}
 }

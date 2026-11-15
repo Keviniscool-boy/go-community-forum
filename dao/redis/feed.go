@@ -3,12 +3,16 @@ package redis
 import (
 	"context"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // Feed 缓存 key
 const (
-	keyFeedHotCache = "feed:hot:v2" // 热榜/推荐流缓存：装配好的条目 JSON，TTL 10 分钟（结构变更时递增版本）
+	keyFeedHotCache = "feed:hot:v3" // 热榜/推荐流缓存：JSON（含快照版本号），TTL 10 分钟
+	keyFeedHotLock  = "feed:hot:v3:lock"
 	feedCacheTTL    = 10 * time.Minute
+	feedLockTTL     = 30 * time.Second
 )
 
 // GetFeedHotCache 读取热榜缓存原始 JSON（不存在返回 nil, nil）
@@ -27,14 +31,23 @@ func SetFeedHotCache(data []byte) error {
 	return rdb.Set(ctx, getRedisKey(keyFeedHotCache), data, feedCacheTTL).Err()
 }
 
-// SetFeedRefreshLock 热榜刷新锁，避免并发重复计算（拿到锁才刷新）
-func SetFeedRefreshLock() (bool, error) {
+// SetFeedRefreshLock 获取热榜刷新锁（唯一持有者标识）
+// 锁带随机 holder，释放时校验归属，避免误删他人的锁
+func SetFeedRefreshLock(holder string) (bool, error) {
 	ctx := context.Background()
-	return rdb.SetNX(ctx, getRedisKey(keyFeedHotCache+":lock"), 1, 30*time.Second).Result()
+	return rdb.SetNX(ctx, getRedisKey(keyFeedHotLock), holder, feedLockTTL).Result()
 }
 
-// ReleaseFeedRefreshLock 释放刷新锁
-func ReleaseFeedRefreshLock() {
+// releaseLockScript 持有者匹配才删除锁（原子）
+var releaseLockScript = redis.NewScript(`
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+`)
+
+// ReleaseFeedRefreshLock 校验持有者后释放锁
+func ReleaseFeedRefreshLock(holder string) {
 	ctx := context.Background()
-	rdb.Del(ctx, getRedisKey(keyFeedHotCache+":lock"))
+	releaseLockScript.Run(ctx, rdb, []string{getRedisKey(keyFeedHotLock)}, holder)
 }

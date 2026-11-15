@@ -50,11 +50,18 @@ func GetFeedHandler(c *gin.Context) {
 	}
 	if err != nil {
 		zap.L().Error("get feed failed", zap.String("type", feedType), zap.Error(err))
-		if errors.Is(err, logic.ErrCursorInvalid) {
+		switch {
+		case errors.Is(err, logic.ErrCursorInvalid):
 			ResponseError(c, CodeInvalidParams)
-			return
+		case errors.Is(err, logic.ErrFeedRefreshing):
+			// 并发冷启动或缓存重建中：明确可重试，不伪装成空列表
+			ResponseError(c, CodeFeedRefreshing)
+		case errors.Is(err, logic.ErrFeedSnapshotExpired):
+			// 缓存快照已刷新，旧游标失效：客户端重刷首页
+			ResponseError(c, CodeFeedExpired)
+		default:
+			ResponseError(c, CodeServerBusy)
 		}
-		ResponseError(c, CodeServerBusy)
 		return
 	}
 	ResponseSuccess(c, data)

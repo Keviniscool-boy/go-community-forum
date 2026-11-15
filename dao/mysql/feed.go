@@ -65,6 +65,9 @@ func LatestFeedPage(cursorTime time.Time, cursorID int64, limit int) (rows []*Fe
 }
 
 // FollowingFeedPage 关注 Feed：只取关注用户的内容，按创建时间倒序 cursor 分页
+// 参数顺序必须与 SQL 占位符顺序一致：
+//   第一段 SELECT：q.author_id IN (...) → 游标 3 个；
+//   第二段 SELECT：a.author_id IN (...) → 游标 3 个
 func FollowingFeedPage(authorIDs []int64, cursorTime time.Time, cursorID int64, limit int) (rows []*FeedRow, err error) {
 	rows = make([]*FeedRow, 0, limit)
 	// IN 占位符
@@ -77,15 +80,25 @@ func FollowingFeedPage(authorIDs []int64, cursorTime time.Time, cursorID int64, 
 	}
 	qCond := "q.author_id IN (" + placeholders + ")"
 	aCond := "a.author_id IN (" + placeholders + ")"
-	args := make([]interface{}, 0, len(authorIDs)*2+8)
-	args = append(args, int64sToArgs(authorIDs)...)
-	args = append(args, int64sToArgs(authorIDs)...)
 	if cursorID > 0 {
 		qCond += " AND (q.create_time < ? OR (q.create_time = ? AND q.question_id < ?))"
 		aCond += " AND (a.create_time < ? OR (a.create_time = ? AND a.answer_id < ?))"
-		args = append(args, cursorTime, cursorTime, cursorID, cursorTime, cursorTime, cursorID)
 	}
+	// item_id 由雪花算法全局生成，跨 question/answer 两表保证唯一，
+	// 因此 (create_time, item_id) 是全序，keyset 分页不会漏数据或重复
 	query := fmt.Sprintf(feedUnionSQL, qCond, aCond) + " ORDER BY create_time DESC, item_id DESC LIMIT ?"
+
+	args := make([]interface{}, 0, len(authorIDs)*2+8)
+	// 第一段：作者 IN + 游标
+	args = append(args, int64sToArgs(authorIDs)...)
+	if cursorID > 0 {
+		args = append(args, cursorTime, cursorTime, cursorID)
+	}
+	// 第二段：作者 IN + 游标
+	args = append(args, int64sToArgs(authorIDs)...)
+	if cursorID > 0 {
+		args = append(args, cursorTime, cursorTime, cursorID)
+	}
 	args = append(args, limit)
 	err = db.Select(&rows, query, args...)
 	return

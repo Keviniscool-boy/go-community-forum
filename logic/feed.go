@@ -2,6 +2,7 @@ package logic
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
 	"sort"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"bluebell/dao/mysql"
 	"bluebell/dao/redis"
 	"bluebell/models"
+	"bluebell/pkg/snowflake"
 	"go.uber.org/zap"
 )
 
@@ -28,6 +30,12 @@ const (
 type cachedFeedEntry struct {
 	Item      *models.FeedItem `json:"item"`
 	BaseScore float64          `json:"base_score"`
+}
+
+// cachedFeedSnapshot 缓存整体结构：快照版本绑定游标，版本变更后旧游标失效
+type cachedFeedSnapshot struct {
+	Version int64              `json:"version"` // 缓存写入时间（unix nano）
+	Entries []cachedFeedEntry  `json:"entries"`
 }
 
 // buildFeedItems 把 Feed 查询行装配成 FeedItem（批量查作者与话题，避免 N+1）
@@ -122,25 +130,55 @@ func feedBaseScore(item *models.FeedItem) float64 {
 	return interaction + freshness*freshnessScale
 }
 
-// getHotFeedCache 读取热榜缓存；缓存过期或为空时重建（加锁避免并发重复计算）
-func getHotFeedCache() ([]cachedFeedEntry, error) {
-	if data, _ := redis.GetFeedHotCache(); data != nil {
-		var entries []cachedFeedEntry
-		if err := json.Unmarshal(data, &entries); err == nil {
-			return entries, nil
-		}
+// feed refreshing 相关错误：调用方（controller）映射为可重试的业务码
+var (
+	ErrFeedRefreshing      = errors.New("热榜更新中，请稍后重试")
+	ErrFeedSnapshotExpired = errors.New("列表已更新，请刷新重试")
+)
+
+// getHotFeedCache 读取热榜缓存（返回快照与版本号）
+// 缓存不存在时：抢锁重建；抢不到锁的请求短暂等待缓存就绪，
+// 超时仍无缓存则返回可重试错误——绝不把"正在刷新"伪装成空 Feed
+func getHotFeedCache() (*cachedFeedSnapshot, error) {
+	// 快路径：命中缓存
+	if snap := readHotFeedCache(); snap != nil {
+		return snap, nil
 	}
-	// 尝试拿刷新锁
-	ok, err := redis.SetFeedRefreshLock()
+	// 尝试抢锁重建（随机持有者标识）
+	holder := strconv.FormatInt(snowflake.GenerateID(), 10)
+	ok, err := redis.SetFeedRefreshLock(holder)
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
-		// 别的请求正在刷新，稍后重试；本轮直接返回空列表
-		return []cachedFeedEntry{}, nil
+	if ok {
+		defer redis.ReleaseFeedRefreshLock(holder)
+		return rebuildHotFeedCache()
 	}
-	defer redis.ReleaseFeedRefreshLock()
+	// 别的请求正在刷新：最多等 2 秒（200ms × 10 轮）轮询缓存
+	for i := 0; i < 10; i++ {
+		time.Sleep(200 * time.Millisecond)
+		if snap := readHotFeedCache(); snap != nil {
+			return snap, nil
+		}
+	}
+	return nil, ErrFeedRefreshing
+}
 
+// readHotFeedCache 读缓存并反序列化；损坏/缺失返回 nil
+func readHotFeedCache() *cachedFeedSnapshot {
+	data, _ := redis.GetFeedHotCache()
+	if data == nil {
+		return nil
+	}
+	var snap cachedFeedSnapshot
+	if err := json.Unmarshal(data, &snap); err != nil || len(snap.Entries) == 0 {
+		return nil
+	}
+	return &snap
+}
+
+// rebuildHotFeedCache 重建热榜缓存并返回新快照
+func rebuildHotFeedCache() (*cachedFeedSnapshot, error) {
 	// 重建：取近 30 天热门候选
 	rows, err := mysql.HotFeedCandidates(feedCandidateMax * 3)
 	if err != nil {
@@ -164,12 +202,16 @@ func getHotFeedCache() ([]cachedFeedEntry, error) {
 	if len(entries) > feedCandidateMax {
 		entries = entries[:feedCandidateMax]
 	}
-	if data, err := json.Marshal(entries); err == nil {
+	snap := &cachedFeedSnapshot{
+		Version: time.Now().UnixNano(),
+		Entries: entries,
+	}
+	if data, err := json.Marshal(snap); err == nil {
 		if err := redis.SetFeedHotCache(data); err != nil {
 			zap.L().Warn("cache hot feed failed", zap.Error(err))
 		}
 	}
-	return entries, nil
+	return snap, nil
 }
 
 // recommendPage 应用关注加分后排序取页
@@ -204,7 +246,7 @@ func sliceFeedPage(entries []cachedFeedEntry, offset, limit int) (items []*model
 	return items, end < len(entries)
 }
 
-// GetHotFeed 热榜（offset 游标）
+// GetHotFeed 热榜（游标绑定缓存快照版本，快照刷新后旧游标返回可重试错误）
 func GetHotFeed(cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
 	if limit <= 0 {
 		limit = 20
@@ -212,18 +254,14 @@ func GetHotFeed(cursor string, limit int) (*models.PageResult[*models.FeedItem],
 	if limit > 50 {
 		limit = 50
 	}
-	offset, err := parseOffsetCursor(cursor)
-	if err != nil {
-		return nil, ErrCursorInvalid
-	}
-	entries, err := getHotFeedCache()
+	offset, snap, err := parseOffsetAndSnapshot(cursor)
 	if err != nil {
 		return nil, err
 	}
-	items, hasMore := sliceFeedPage(entries, offset, limit)
+	items, hasMore := sliceFeedPage(snap.Entries, offset, limit)
 	next := ""
 	if hasMore {
-		next = encodeOffsetCursor(offset + limit)
+		next = encodeOffsetCursor(offset+limit, snap.Version)
 	}
 	return &models.PageResult[*models.FeedItem]{
 		Items:      items,
@@ -240,11 +278,7 @@ func GetRecommendFeed(userID int64, cursor string, limit int) (*models.PageResul
 	if limit > 50 {
 		limit = 50
 	}
-	offset, err := parseOffsetCursor(cursor)
-	if err != nil {
-		return nil, ErrCursorInvalid
-	}
-	entries, err := getHotFeedCache()
+	offset, snap, err := parseOffsetAndSnapshot(cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -258,16 +292,33 @@ func GetRecommendFeed(userID int64, cursor string, limit int) (*models.PageResul
 			followed[id] = struct{}{}
 		}
 	}
-	items, hasMore := recommendPage(entries, followed, offset, limit)
+	items, hasMore := recommendPage(snap.Entries, followed, offset, limit)
 	next := ""
 	if hasMore {
-		next = encodeOffsetCursor(offset + limit)
+		next = encodeOffsetCursor(offset+limit, snap.Version)
 	}
 	return &models.PageResult[*models.FeedItem]{
 		Items:      items,
 		NextCursor: next,
 		HasMore:    hasMore,
 	}, nil
+}
+
+// parseOffsetAndSnapshot 解析 offset 游标并校验快照版本：
+// 游标携带的版本与当前缓存版本不一致时返回 ErrFeedSnapshotExpired（客户端应重刷首页）
+func parseOffsetAndSnapshot(cursor string) (int, *cachedFeedSnapshot, error) {
+	offset, cursorVersion, err := parseOffsetCursor(cursor)
+	if err != nil {
+		return 0, nil, ErrCursorInvalid
+	}
+	snap, err := getHotFeedCache()
+	if err != nil {
+		return 0, nil, err
+	}
+	if cursorVersion != 0 && cursorVersion != snap.Version {
+		return 0, nil, ErrFeedSnapshotExpired
+	}
+	return offset, snap, nil
 }
 
 // GetLatestFeed 最新流（时间 + id 双字段游标）
@@ -362,27 +413,28 @@ func parseTimeCursor(cursor string) (*timeCursor, error) {
 }
 
 type offsetCursor struct {
-	Offset int `json:"o"`
+	Offset  int   `json:"o"`
+	Version int64 `json:"v,omitempty"` // 绑定的热榜缓存快照版本
 }
 
-func encodeOffsetCursor(offset int) string {
-	return base64Encode(marshalJSONMust(&offsetCursor{Offset: offset}))
+func encodeOffsetCursor(offset int, version int64) string {
+	return base64Encode(marshalJSONMust(&offsetCursor{Offset: offset, Version: version}))
 }
 
-func parseOffsetCursor(cursor string) (int, error) {
+func parseOffsetCursor(cursor string) (int, int64, error) {
 	if cursor == "" {
-		return 0, nil
+		return 0, 0, nil
 	}
 	raw, err := base64Decode(cursor)
 	if err != nil {
-		return 0, ErrCursorInvalid
+		return 0, 0, ErrCursorInvalid
 	}
 	var c offsetCursor
 	if err := unmarshalJSONMust(raw, &c); err != nil {
-		return 0, ErrCursorInvalid
+		return 0, 0, ErrCursorInvalid
 	}
 	if c.Offset < 0 {
-		return 0, ErrCursorInvalid
+		return 0, 0, ErrCursorInvalid
 	}
-	return c.Offset, nil
+	return c.Offset, c.Version, nil
 }
