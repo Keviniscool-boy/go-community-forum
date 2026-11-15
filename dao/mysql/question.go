@@ -40,7 +40,7 @@ func CreateQuestion(q *models.Question, topicIDs []int64) error {
 func GetQuestionByID(id int64) (q *models.Question, err error) {
 	q = new(models.Question)
 	sqlStr := `SELECT question_id, title, description, author_id, answer_count,
-		      follower_count, view_count, status, create_time
+		      comment_count, follower_count, view_count, status, create_time
 		      FROM question WHERE question_id = ? AND status = 1`
 	if err = db.Get(q, sqlStr, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -76,7 +76,7 @@ func GetQuestionsByIDs(ids []int64) (questions []*models.Question, err error) {
 	}
 	questions = make([]*models.Question, 0, len(ids))
 	query, args, err := sqlx.In(`SELECT question_id, title, description, author_id, answer_count,
-		follower_count, view_count, status, create_time
+		comment_count, follower_count, view_count, status, create_time
 		FROM question WHERE question_id IN (?)`, ids)
 	if err != nil {
 		return nil, err
