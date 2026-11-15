@@ -64,3 +64,8 @@ func Close() {
 func GetDB() *sqlx.DB {
 	return db
 }
+
+// setGlobalDB 测试用：替换全局数据库连接（migrate_test.go 使用）
+func setGlobalDB(d *sqlx.DB) {
+	db = d
+}

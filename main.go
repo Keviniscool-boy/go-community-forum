@@ -62,6 +62,14 @@ func main() {
 	}
 	defer mysql.Close()
 
+	// 3.1 执行版本化迁移（mysql.auto_migrate=false 可关闭）
+	if viper.GetBool("mysql.auto_migrate") {
+		if err := mysql.RunMigrations(); err != nil {
+			fmt.Printf("mysql.RunMigrations() failed, err:%v\n", err)
+			return
+		}
+	}
+
 	// 4.初始化 Redis
 	if err := redis.Init(); err != nil {
 		fmt.Printf("redis.Init() failed, err:%v\n", err)

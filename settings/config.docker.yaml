@@ -3,6 +3,7 @@ app:
   mode: "dev"
   port: 8081
 mysql:
+  auto_migrate: true  # 启动时自动执行 models/migrations 迁移链
   host: "mysql8019"
   port: 3306
   user: "bluebell"

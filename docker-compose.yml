@@ -10,13 +10,19 @@ services:
     ports:
       - "33061:3306"
     volumes:
+      # 基线结构（旧版三张表）；邮箱/问答/互动等新结构由服务启动时的版本化迁移链补齐
       - ./models/create_table.sql:/docker-entrypoint-initdb.d/create_table.sql
+      # 数据持久化：容器重建不丢数据
+      - mysql_data:/var/lib/mysql
 
   redis507:
     image: "redis:7"
     restart: unless-stopped
     ports:
       - "26379:6379"
+    volumes:
+      # Redis AOF 持久化：验证码可丢（短 TTL），Feed 缓存可重建
+      - redis_data:/data
 
   bluebell_app:
     build: .
@@ -45,3 +51,7 @@ services:
       - bluebell_app
     ports:
       - "8080:80"
+
+volumes:
+  mysql_data:
+  redis_data:
