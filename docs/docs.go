@@ -24,6 +24,292 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/admin/audit-logs": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "只追加的管理操作审计记录，cursor 分页",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理后台"
+                ],
+                "summary": "审计日志",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "游标",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "数量，默认 50，最大 100",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.AuditLogPage"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/content/{type}/{id}/{action}": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "对问题/回答执行 approve / reject / quarantine",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理后台"
+                ],
+                "summary": "内容审核",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "question | answer",
+                        "name": "type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "内容 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "approve | reject | quarantine",
+                        "name": "action",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/metrics/overview": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "用户/内容/举报/审计的计数总览",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理后台"
+                ],
+                "summary": "指标总览",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": true
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/reports": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "管理员/审核员查看举报队列，cursor 分页",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理后台"
+                ],
+                "summary": "举报队列",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "pending | resolved | dismissed，不传查全部",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "游标",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "数量，默认 50，最大 100",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.ReportPage"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/reports/{id}/resolve": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "resolve 表示举报成立（内容隔离下架），dismiss 表示驳回；乐观锁防并发覆盖",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理后台"
+                ],
+                "summary": "处理举报",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "举报 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "处理决定",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.resolveRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/users/{id}/disable": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "禁用后该用户全部会话立即失效",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理后台"
+                ],
+                "summary": "禁用/启用用户",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "enable: true 启用 / false 禁用",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.setEnableRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/answers/{answer_id}": {
             "put": {
                 "security": [
@@ -827,6 +1113,321 @@ const docTemplate = `{
                 }
             }
         },
+        "/drafts": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "草稿相关接口"
+                ],
+                "summary": "草稿列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "question | answer",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/models.Draft"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "草稿相关接口"
+                ],
+                "summary": "创建草稿",
+                "parameters": [
+                    {
+                        "description": "草稿参数",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamSaveDraft"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/drafts/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "草稿相关接口"
+                ],
+                "summary": "草稿详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "草稿 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.Draft"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "草稿相关接口"
+                ],
+                "summary": "删除草稿",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "草稿 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "带版本号乐观锁；冲突返回 CodeDraftConflict",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "草稿相关接口"
+                ],
+                "summary": "更新草稿（自动保存）",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "草稿 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "内容与版本",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.updateDraftRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": true
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/drafts/{id}/publish": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "草稿内容发布时重新执行审核流（敏感词检查），question 草稿创建问题、answer 草稿创建回答",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "草稿相关接口"
+                ],
+                "summary": "发布草稿",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "草稿 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/events": {
+            "post": {
+                "description": "曝光/点击/停留等事件；客户端事件不直接改变分数与权限；同 event_id 幂等",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "推荐相关接口"
+                ],
+                "summary": "推荐事件批量上报",
+                "parameters": [
+                    {
+                        "description": "事件批次",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.eventRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/feed/recommend": {
             "get": {
                 "description": "推荐流（/feed/recommend）、最新流（/feed/latest）、热榜（/feed/hot）为公开接口；\n关注流（/feed/following）需登录；全部使用 cursor 分页",
@@ -910,6 +1511,113 @@ const docTemplate = `{
                                     "properties": {
                                         "data": {
                                             "$ref": "#/definitions/controller.LoginResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/markdown/preview": {
+            "post": {
+                "description": "安全子集（标题/粗体/斜体/列表/代码/链接/图片），服务端清洗，无原始 HTML",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "媒体相关接口"
+                ],
+                "summary": "Markdown 安全渲染预览",
+                "parameters": [
+                    {
+                        "description": "markdown 源文本",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.previewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/media/upload": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "multipart 上传（field: file）；类型白名单 png/jpeg/gif/webp（魔数检测）；头像 5MB、内容图 10MB；服务端解码校验与去重",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "媒体相关接口"
+                ],
+                "summary": "上传图片",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "avatar（5MB）| content（10MB，默认）",
+                        "name": "purpose",
+                        "in": "query"
+                    },
+                    {
+                        "type": "file",
+                        "description": "图片文件",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
                                         }
                                     }
                                 }
@@ -1612,6 +2320,154 @@ const docTemplate = `{
                 }
             }
         },
+        "/reports": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "举报问题/回答/评论/用户；同用户同目标幂等；每小时限流",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "举报相关接口"
+                ],
+                "summary": "创建举报",
+                "parameters": [
+                    {
+                        "description": "举报参数",
+                        "name": "object",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ParamCreateReport"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/controller.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/search": {
+            "get": {
+                "description": "搜索问题、回答、用户、话题；只返回公开可见内容；q 1-100 字符",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "搜索相关接口"
+                ],
+                "summary": "统一搜索",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "关键词（1-100 字符）",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "all（默认）| question | answer | user | topic",
+                        "name": "scope",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "relevance（默认）| latest",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "游标",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "数量，默认 20，最大 50",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/search.Result"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/search/suggestions": {
+            "get": {
+                "description": "话题名与用户名前缀建议",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "搜索相关接口"
+                ],
+                "summary": "搜索建议",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "前缀",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/controller.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/signup": {
             "post": {
                 "description": "用户注册接口，创建新账号",
@@ -2127,7 +2983,8 @@ const docTemplate = `{
                 1025,
                 1026,
                 1027,
-                1028
+                1028,
+                1029
             ],
             "x-enum-varnames": [
                 "CodeSuccess",
@@ -2158,7 +3015,8 @@ const docTemplate = `{
                 "CodeFeedExpired",
                 "CodeForbidden",
                 "CodeResetTokenInvalid",
-                "CodeEmailConflict"
+                "CodeEmailConflict",
+                "CodeDraftConflict"
             ]
         },
         "controller.Response": {
@@ -2169,6 +3027,110 @@ const docTemplate = `{
                 },
                 "data": {},
                 "msg": {}
+            }
+        },
+        "controller.eventRequest": {
+            "type": "object",
+            "required": [
+                "events"
+            ],
+            "properties": {
+                "events": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "event_type",
+                            "item_id",
+                            "item_type"
+                        ],
+                        "properties": {
+                            "event_id": {
+                                "description": "客户端去重 ID",
+                                "type": "string"
+                            },
+                            "event_type": {
+                                "type": "string"
+                            },
+                            "feed_type": {
+                                "type": "string"
+                            },
+                            "item_id": {
+                                "type": "string"
+                            },
+                            "item_type": {
+                                "type": "string"
+                            },
+                            "position": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "controller.previewRequest": {
+            "type": "object",
+            "required": [
+                "markdown"
+            ],
+            "properties": {
+                "markdown": {
+                    "type": "string",
+                    "maxLength": 20000
+                }
+            }
+        },
+        "controller.resolveRequest": {
+            "type": "object",
+            "required": [
+                "decision"
+            ],
+            "properties": {
+                "decision": {
+                    "type": "string",
+                    "enum": [
+                        "resolve",
+                        "dismiss"
+                    ]
+                },
+                "note": {
+                    "type": "string",
+                    "maxLength": 1000
+                }
+            }
+        },
+        "controller.setEnableRequest": {
+            "type": "object",
+            "required": [
+                "enable"
+            ],
+            "properties": {
+                "enable": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "controller.updateDraftRequest": {
+            "type": "object",
+            "required": [
+                "content",
+                "version"
+            ],
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "maxLength": 20000
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "version": {
+                    "type": "integer",
+                    "minimum": 1
+                }
             }
         },
         "logic.ApiUserProfile": {
@@ -2432,6 +3394,102 @@ const docTemplate = `{
                 }
             }
         },
+        "models.ApiReportDetail": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "reason_code": {
+                    "type": "string"
+                },
+                "reporter_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "reporter_name": {
+                    "type": "string"
+                },
+                "review_note": {
+                    "type": "string"
+                },
+                "reviewed_at": {
+                    "type": "string"
+                },
+                "reviewer_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "target_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "target_type": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AuditLog": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "actor_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "ip_hash": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "target_id": {
+                    "type": "string"
+                },
+                "target_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.AuditLogPage": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.AuditLog"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
         "models.AuthUser": {
             "type": "object",
             "properties": {
@@ -2442,6 +3500,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "email": {
+                    "type": "string"
+                },
+                "role": {
                     "type": "string"
                 },
                 "user_id": {
@@ -2496,6 +3557,39 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "models.Draft": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "draft_type": {
+                    "description": "0 question 1 answer",
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "question_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "update_time": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },
@@ -2679,6 +3773,42 @@ const docTemplate = `{
                 }
             }
         },
+        "models.ParamCreateReport": {
+            "type": "object",
+            "required": [
+                "reason_code",
+                "target_id",
+                "target_type"
+            ],
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "maxLength": 1000
+                },
+                "reason_code": {
+                    "type": "string",
+                    "enum": [
+                        "spam",
+                        "abuse",
+                        "copyright",
+                        "unsafe",
+                        "other"
+                    ]
+                },
+                "target_id": {
+                    "type": "string"
+                },
+                "target_type": {
+                    "type": "string",
+                    "enum": [
+                        "question",
+                        "answer",
+                        "comment",
+                        "user"
+                    ]
+                }
+            }
+        },
         "models.ParamCreateTopic": {
             "type": "object",
             "required": [
@@ -2775,6 +3905,33 @@ const docTemplate = `{
                 },
                 "reset_token": {
                     "type": "string"
+                }
+            }
+        },
+        "models.ParamSaveDraft": {
+            "type": "object",
+            "required": [
+                "content",
+                "draft_type"
+            ],
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "maxLength": 20000
+                },
+                "draft_type": {
+                    "type": "string",
+                    "enum": [
+                        "question",
+                        "answer"
+                    ]
+                },
+                "question_id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 200
                 }
             }
         },
@@ -2965,6 +4122,23 @@ const docTemplate = `{
                 }
             }
         },
+        "models.ReportPage": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ApiReportDetail"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
         "models.Topic": {
             "type": "object",
             "properties": {
@@ -3021,6 +4195,47 @@ const docTemplate = `{
                     "description": "帖子id（雪花id字符串）",
                     "type": "string",
                     "example": "0"
+                }
+            }
+        },
+        "search.Result": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/search.ResultItem"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "search.ResultItem": {
+            "type": "object",
+            "properties": {
+                "author_id": {
+                    "type": "string"
+                },
+                "create_time": {
+                    "type": "integer"
+                },
+                "document_id": {
+                    "description": "已是字符串，不加 ,string（避免双重引号）",
+                    "type": "string"
+                },
+                "document_type": {
+                    "type": "string"
+                },
+                "excerpt": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
                 }
             }
         }
