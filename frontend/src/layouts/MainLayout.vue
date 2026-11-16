@@ -2,7 +2,7 @@
 // 主布局：顶部导航 + 左侧导航 + 中间内容 + 右侧边栏
 // 移动端（<768px）隐藏两侧栏，Feed 单列显示
 import { ref } from 'vue'
-import { HomeFilled, EditPen, Compass, TrendCharts, Document, Star, Clock, Setting, Notebook, Collection } from '@element-plus/icons-vue'
+import { HomeFilled, EditPen, Compass, TrendCharts, Document, Star, Clock, Setting, Notebook, Collection, DataAnalysis } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import TopNav from '@/components/TopNav.vue'
 
@@ -43,6 +43,12 @@ const isMobileSidebarVisible = ref(false)
           </router-link>
           <router-link class="side-link" to="/history">
             <el-icon><Clock /></el-icon><span>历史</span>
+          </router-link>
+          <router-link v-if="auth.isLoggedIn" class="side-link" to="/creator">
+            <el-icon><DataAnalysis /></el-icon><span>创作者中心</span>
+          </router-link>
+          <router-link v-if="auth.isLoggedIn" class="side-link" to="/settings/personalization">
+            <el-icon><Compass /></el-icon><span>推荐设置</span>
           </router-link>
           <router-link v-if="auth.user?.role === 'admin' || auth.user?.role === 'moderator'" class="side-link" to="/admin">
             <el-icon><Setting /></el-icon><span>管理后台</span>

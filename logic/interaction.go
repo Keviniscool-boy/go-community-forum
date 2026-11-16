@@ -213,3 +213,28 @@ func ListComments(targetTypeStr, targetIDStr, cursor string, limit int) (*models
 		HasMore:    hasMore,
 	}, nil
 }
+
+// TargetAuthorIDForModeration 申诉校验用：返回内容作者
+func TargetAuthorIDForModeration(targetType int32, targetID int64) (int64, error) {
+	switch targetType {
+	case models.TargetAnswer:
+		a, err := mysql.GetAnswerByID(targetID)
+		if err != nil {
+			return 0, err
+		}
+		return a.AuthorID, nil
+	case models.TargetQuestion:
+		q, err := mysql.GetQuestionByID(targetID)
+		if err != nil {
+			return 0, err
+		}
+		return q.AuthorID, nil
+	case models.TargetArticle:
+		a, err := mysql.GetArticleByID(targetID)
+		if err != nil {
+			return 0, err
+		}
+		return a.AuthorID, nil
+	}
+	return 0, ErrCommentInvalid
+}

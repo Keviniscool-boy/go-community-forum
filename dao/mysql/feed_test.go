@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -35,9 +36,35 @@ func TestFollowingFeedPagination(t *testing.T) {
 		deleted_at timestamp NULL DEFAULT NULL,
 		create_time timestamp NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY (id), UNIQUE KEY uk_answer_id (answer_id)) ENGINE=InnoDB`)
+	mustExec(t, `CREATE TABLE article (
+		id bigint NOT NULL AUTO_INCREMENT, article_id bigint NOT NULL,
+		author_id bigint NOT NULL, column_id bigint NULL,
+		title varchar(200) NOT NULL, content mediumtext NOT NULL,
+		view_count int NOT NULL DEFAULT 0, status tinyint NOT NULL DEFAULT 1,
+		moderation_status tinyint NOT NULL DEFAULT 1, visibility tinyint NOT NULL DEFAULT 1,
+		deleted_at timestamp NULL DEFAULT NULL,
+		create_time timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (id), UNIQUE KEY uk_article_id (article_id)) ENGINE=InnoDB`)
+	mustExec(t, `CREATE TABLE column_info (
+		id bigint NOT NULL AUTO_INCREMENT, column_id bigint NOT NULL, owner_id bigint NOT NULL,
+		name varchar(64) NOT NULL, status tinyint NOT NULL DEFAULT 1,
+		PRIMARY KEY (id), UNIQUE KEY uk_column_id (column_id)) ENGINE=InnoDB`)
+	mustExec(t, `CREATE TABLE user_follow (
+		id bigint NOT NULL AUTO_INCREMENT, follower_id bigint NOT NULL, following_id bigint NOT NULL,
+		PRIMARY KEY (id), UNIQUE KEY uk_follower_following (follower_id, following_id)) ENGINE=InnoDB`)
+	mustExec(t, `CREATE TABLE topic_follow (
+		id bigint NOT NULL AUTO_INCREMENT, user_id bigint NOT NULL, topic_id bigint NOT NULL,
+		PRIMARY KEY (id), UNIQUE KEY uk_user_topic (user_id, topic_id)) ENGINE=InnoDB`)
+	mustExec(t, `CREATE TABLE column_follow (
+		id bigint NOT NULL AUTO_INCREMENT, user_id bigint NOT NULL, column_id bigint NOT NULL,
+		PRIMARY KEY (id), UNIQUE KEY uk_user_column (user_id, column_id)) ENGINE=InnoDB`)
+	mustExec(t, `CREATE TABLE question_topic (
+		id bigint NOT NULL AUTO_INCREMENT, question_id bigint NOT NULL, topic_id bigint NOT NULL,
+		PRIMARY KEY (id), UNIQUE KEY uk_question_topic (question_id, topic_id)) ENGINE=InnoDB`)
 	t.Cleanup(func() {
-		mustExec(t, "DROP TABLE IF EXISTS answer")
-		mustExec(t, "DROP TABLE IF EXISTS question")
+		for _, tbl := range []string{"question_topic", "column_follow", "topic_follow", "user_follow", "column_info", "article", "answer", "question", "user"} {
+			mustExec(t, "DROP TABLE IF EXISTS "+tbl)
+		}
 	})
 
 	// 造数据：2 个关注作者，各发 5 条内容（i%3==0 为问题，其余为回答挂在 q9000 下）
@@ -64,11 +91,19 @@ func TestFollowingFeedPagination(t *testing.T) {
 	// 外人内容，不应出现在关注流
 	mustExec(t, "INSERT INTO question (question_id, title, author_id, description, create_time) VALUES (7777, 'outsider', ?, '', ?)", outsider, base)
 
-	// 翻页遍历：page size 4，直到取完，比对全集
-	seen := make(map[int64]bool)
+	// 翻页遍历：page size 4，多来源（作者+话题+专栏），直到取完，比对全集
+	seen := make(map[string]bool)
 	cursorTime, cursorType, cursorID, total := time.Time{}, "", int64(0), 0
 	for page := 0; page < 10; page++ {
-		rows, err := FollowingFeedPage([]int64{authorA, authorB}, cursorTime, cursorType, cursorID, 4)
+		rows, err := FollowingFeedPage(&FollowingFeedPageParams{
+			AuthorIDs:  []int64{authorA, authorB},
+			TopicIDs:   []int64{9000},
+			ColumnIDs:  []int64{8000},
+			CursorTime: cursorTime,
+			CursorType: cursorType,
+			CursorID:   cursorID,
+			Limit:      4,
+		})
 		if err != nil {
 			t.Fatalf("page %d: %v", page, err)
 		}
@@ -79,10 +114,11 @@ func TestFollowingFeedPagination(t *testing.T) {
 			if r.AuthorID == outsider {
 				t.Fatal("outsider content leaked into following feed")
 			}
-			if seen[r.ItemID] {
-				t.Fatalf("duplicate item %d across pages", r.ItemID)
+			key := r.ItemType + ":" + strconv.FormatInt(r.ItemID, 10)
+			if seen[key] {
+				t.Fatalf("duplicate item %s across pages", key)
 			}
-			seen[r.ItemID] = true
+			seen[key] = true
 			total++
 			cursorTime, cursorType, cursorID = r.CreateTime, r.ItemType, r.ItemID
 		}
@@ -90,13 +126,18 @@ func TestFollowingFeedPagination(t *testing.T) {
 			break
 		}
 	}
-	// 关注作者内容：10 条 + 挂回答的问题 9000（作者 A）= 11 条
+	// 关注作者内容：10 条（i=0..9，i%3==0 是 question 其余 answer）+ 文章 1001 = 11 条
 	if total != 11 {
 		t.Fatalf("following feed items mismatch: got %d, want 11", total)
 	}
 
 	// 排序检查：create_time 降序，同秒内 item_id 严格降序（total order，不漏不重）
-	rows, err := FollowingFeedPage([]int64{authorA, authorB}, time.Time{}, "", 0, 100)
+	rows, err := FollowingFeedPage(&FollowingFeedPageParams{
+		AuthorIDs: []int64{authorA, authorB},
+		TopicIDs:  []int64{9000},
+		ColumnIDs: []int64{8000},
+		Limit:     100,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

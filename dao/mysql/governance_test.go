@@ -38,6 +38,15 @@ func TestModerationVisibilityGovernance(t *testing.T) {
 		deleted_at timestamp NULL DEFAULT NULL, updated_by bigint NULL,
 		create_time timestamp NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY (id), UNIQUE KEY uk_answer_id (answer_id)) ENGINE=InnoDB`)
+	mustExec(t, `CREATE TABLE article (
+		id bigint NOT NULL AUTO_INCREMENT, article_id bigint NOT NULL,
+		author_id bigint NOT NULL, column_id bigint NULL,
+		title varchar(200) NOT NULL, content mediumtext NOT NULL,
+		view_count int NOT NULL DEFAULT 0, status tinyint NOT NULL DEFAULT 1,
+		moderation_status tinyint NOT NULL DEFAULT 1, visibility tinyint NOT NULL DEFAULT 1,
+		deleted_at timestamp NULL DEFAULT NULL, updated_by bigint NULL,
+		create_time timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (id), UNIQUE KEY uk_article_id (article_id)) ENGINE=InnoDB`)
 
 	uid := int64(50)
 	mustExec(t, "INSERT INTO user (user_id, username, email) VALUES (?, 'author', 'a@t.local')", uid)

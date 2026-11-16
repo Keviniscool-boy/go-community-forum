@@ -105,13 +105,13 @@ func TestMigrationsFreshDB(t *testing.T) {
 		}
 	}
 
-	// 版本记录 000-008（新增迁移后同步更新数量断言）
+	// 版本记录 000-009（新增迁移后同步更新数量断言）
 	var versions []int
 	if err := db.Select(&versions, "SELECT version FROM schema_migrations ORDER BY version"); err != nil {
 		t.Fatal(err)
 	}
-	if len(versions) != 9 {
-		t.Fatalf("expected 9 migrations recorded, got %v", versions)
+	if len(versions) != 10 {
+		t.Fatalf("expected 10 migrations recorded, got %v", versions)
 	}
 
 	// 基线社区种子存在

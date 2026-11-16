@@ -104,6 +104,28 @@ func Setup() *gin.Engine {
 	v1.PATCH("/columns/:id", middlewares.JWTAuthMiddleware(), controller.EditColumnHandler)
 	v1.DELETE("/columns/:id", middlewares.JWTAuthMiddleware(), controller.DeleteColumnHandler)
 
+	// 专栏关注（登录用户）
+	v1.POST("/columns/:id/follow", middlewares.JWTAuthMiddleware(), controller.FollowColumnHandler)
+	v1.DELETE("/columns/:id/follow", middlewares.JWTAuthMiddleware(), controller.UnfollowColumnHandler)
+
+	// 个性化（兴趣/偏好/反馈/屏蔽）——全部需登录
+	v1.GET("/me/interests", middlewares.JWTAuthMiddleware(), controller.GetInterestsHandler)
+	v1.PUT("/me/interests", middlewares.JWTAuthMiddleware(), controller.PutInterestsHandler)
+	v1.GET("/me/recommendation-preferences", middlewares.JWTAuthMiddleware(), controller.GetRecommendationPreferencesHandler)
+	v1.PUT("/me/recommendation-preferences", middlewares.JWTAuthMiddleware(), controller.PutRecommendationPreferencesHandler)
+	v1.POST("/me/recommendation-feedback", middlewares.JWTAuthMiddleware(), controller.AddRecommendationFeedbackHandler)
+	v1.DELETE("/me/recommendation-feedback/:kind/:type/:id", middlewares.JWTAuthMiddleware(), controller.RemoveRecommendationFeedbackHandler)
+	v1.GET("/me/recommendation-feedback", middlewares.JWTAuthMiddleware(), controller.ListRecommendationFeedbackHandler)
+	v1.POST("/users/:id/block", middlewares.JWTAuthMiddleware(), controller.BlockUserHandler)
+	v1.DELETE("/users/:id/block", middlewares.JWTAuthMiddleware(), controller.UnblockUserHandler)
+	v1.GET("/me/blocks", middlewares.JWTAuthMiddleware(), controller.ListBlocksHandler)
+
+	// 通知单条已读
+	v1.POST("/notifications/:id/read", middlewares.JWTAuthMiddleware(), controller.MarkNotificationReadHandler)
+
+	// 申诉
+	v1.POST("/appeals", middlewares.JWTAuthMiddleware(), controller.CreateAppealHandler)
+
 	// 举报（登录用户）
 	v1.POST("/reports", middlewares.JWTAuthMiddleware(), controller.CreateReportHandler)
 
@@ -156,6 +178,23 @@ func Setup() *gin.Engine {
 	adminOnly.Use(middlewares.JWTAuthMiddleware(), middlewares.RequireRoleMiddleware(models.RoleAdmin))
 	{
 		adminOnly.POST("/users/:id/disable", controller.AdminSetUserStatusHandler)
+	}
+
+	// 创作者中心（登录用户，本人数据）
+	creator := v1.Group("/creator")
+	creator.Use(middlewares.JWTAuthMiddleware())
+	{
+		creator.GET("/overview", controller.CreatorOverviewHandler)
+		creator.GET("/contents", controller.CreatorContentsHandler)
+		creator.GET("/contents/:type/:id/metrics", controller.CreatorContentMetricsHandler)
+	}
+
+	// 申诉管理（moderator/admin）
+	appeals := v1.Group("/admin/appeals")
+	appeals.Use(middlewares.JWTAuthMiddleware(), middlewares.RequireRoleMiddleware(models.RoleModerator, models.RoleAdmin))
+	{
+		appeals.GET("", controller.ListAppealsHandler)
+		appeals.POST("/:id/resolve", controller.ResolveAppealHandler)
 	}
 
 	// 话题相关路由

@@ -18,15 +18,19 @@ export interface FeedStats {
 
 // Feed 条目
 export interface FeedItem {
-  item_type: 'question' | 'answer'
+  item_type: 'question' | 'answer' | 'article'
   item_id: string
   question_id?: string
   title: string
   excerpt: string
   author: FeedAuthor
   topic?: { topic_id: string; name: string } | null
+  column?: { column_id: string; name: string } | null
   stats: FeedStats
   create_time: string
+  sources?: string[]
+  recommendation_reason?: string
+  exposure_id?: string
 }
 
 export type FeedType = 'recommend' | 'following' | 'latest' | 'hot'

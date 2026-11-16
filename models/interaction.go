@@ -97,17 +97,24 @@ type FeedStats struct {
 	AnswerCount  int32 `json:"answer_count,omitempty"`
 }
 
-// FeedItem Feed 流条目（问题或回答）
+// FeedItem Feed 流条目（问题/回答/文章）
 type FeedItem struct {
-	ItemType   string     `json:"item_type"` // question | answer
-	ItemID     string     `json:"item_id"`   // 已是字符串，不加 ,string（避免双重引号）
-	QuestionID string     `json:"question_id,omitempty"`
-	Title      string     `json:"title"`
-	Excerpt    string     `json:"excerpt"`
-	Author     FeedAuthor `json:"author"`
+	ItemType   string      `json:"item_type"` // question | answer | article
+	ItemID     string      `json:"item_id"`   // 已是字符串，不加 ,string（避免双重引号）
+	QuestionID string      `json:"question_id,omitempty"`
+	Title      string      `json:"title"`
+	Excerpt    string      `json:"excerpt"`
+	Author     FeedAuthor  `json:"author"`
 	Topic      *TopicBrief `json:"topic,omitempty"`
-	Stats      FeedStats  `json:"stats"`
-	CreateTime time.Time  `json:"create_time"`
+	Column     *ColumnBrief `json:"column,omitempty"`
+	Stats      FeedStats   `json:"stats"`
+	CreateTime time.Time   `json:"create_time"`
+	// 关注流来源标注（规格 4.2）：author | topic | column
+	Sources []string `json:"sources,omitempty"`
+	// 推荐理由（可枚举安全文案，不含他人偏好）
+	RecommendationReason string `json:"recommendation_reason,omitempty"`
+	// 曝光关联 ID（服务端签发，点击事件上报时携带）
+	ExposureID string `json:"exposure_id,omitempty"`
 }
 
 // ---------- Swagger 文档用具体分页类型（swag CLI 对泛型解析有限制） ----------
