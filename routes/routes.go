@@ -157,6 +157,24 @@ func Setup() *gin.Engine {
 	v1.DELETE("/history", middlewares.JWTAuthMiddleware(), controller.ClearHistoryHandler)
 	v1.POST("/views", middlewares.JWTAuthMiddleware(), controller.RecordViewHandler)
 
+	// 私信（全部需登录）
+	dm := v1.Group("/conversations")
+	dm.Use(middlewares.JWTAuthMiddleware())
+	{
+		dm.POST("", controller.StartConversationHandler)
+		dm.GET("", controller.ListConversationsHandler)
+		dm.POST("/:id/accept", controller.AcceptConversationHandler)
+		dm.POST("/:id/decline", controller.DeclineConversationHandler)
+		dm.POST("/:id/close", controller.CloseConversationHandler)
+		dm.POST("/:id/hide", controller.HideConversationHandler)
+		dm.GET("/:id/messages", controller.ListMessagesHandler)
+		dm.POST("/:id/messages", controller.SendMessageHandler)
+		dm.POST("/:id/read", controller.MarkConversationReadHandler)
+	}
+	v1.POST("/messages/:id/report", middlewares.JWTAuthMiddleware(), controller.ReportMessageHandler)
+	v1.GET("/me/message-settings", middlewares.JWTAuthMiddleware(), controller.GetPrivacySettingsHandler)
+	v1.PUT("/me/message-settings", middlewares.JWTAuthMiddleware(), controller.PutPrivacySettingsHandler)
+
 	// 推荐事件埋点（游客与登录用户均可；登录态注入 user_id）
 	v1.POST("/events", middlewares.OptionalAuthMiddleware(), controller.BatchReportEventsHandler)
 	v1.GET("/recommendation-version", controller.RecommendationVersionHandler)

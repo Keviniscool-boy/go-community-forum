@@ -110,8 +110,8 @@ func TestMigrationsFreshDB(t *testing.T) {
 	if err := db.Select(&versions, "SELECT version FROM schema_migrations ORDER BY version"); err != nil {
 		t.Fatal(err)
 	}
-	if len(versions) != 10 {
-		t.Fatalf("expected 10 migrations recorded, got %v", versions)
+	if len(versions) != 11 {
+		t.Fatalf("expected 11 migrations recorded, got %v", versions)
 	}
 
 	// 基线社区种子存在
