@@ -126,6 +126,24 @@ func Setup() *gin.Engine {
 	// 申诉
 	v1.POST("/appeals", middlewares.JWTAuthMiddleware(), controller.CreateAppealHandler)
 
+	// 系列与协作（PRD3）
+	v1.POST("/columns/:id/series", middlewares.JWTAuthMiddleware(), controller.CreateSeriesHandler)
+	v1.GET("/columns/:id/series", controller.ListSeriesForColumnHandler)
+	v1.GET("/series/:id", controller.GetSeriesHandler)
+	v1.PATCH("/series/:id", middlewares.JWTAuthMiddleware(), controller.UpdateSeriesHandler)
+	v1.PUT("/series/:id/order", middlewares.JWTAuthMiddleware(), controller.SetSeriesOrderHandler)
+	v1.POST("/columns/:id/invitations", middlewares.JWTAuthMiddleware(), controller.InviteMemberHandler)
+	v1.POST("/column-invitations/:id/accept", middlewares.JWTAuthMiddleware(), controller.AcceptInvitationHandler)
+	v1.POST("/column-invitations/:id/decline", middlewares.JWTAuthMiddleware(), controller.DeclineInvitationHandler)
+	v1.GET("/columns/:id/members", middlewares.JWTAuthMiddleware(), controller.ListColumnMembersHandler)
+	v1.DELETE("/columns/:id/members/:user_id", middlewares.JWTAuthMiddleware(), controller.RemoveMemberHandler)
+	v1.GET("/articles/:id/versions", middlewares.JWTAuthMiddleware(), controller.ListArticleRevisionsHandler)
+	v1.POST("/articles/:id/versions/:revision_id/restore", middlewares.JWTAuthMiddleware(), controller.RestoreRevisionHandler)
+	v1.POST("/articles/:id/reviews", middlewares.JWTAuthMiddleware(), controller.SubmitReviewHandler)
+	v1.GET("/reviews/:id/comments", middlewares.JWTAuthMiddleware(), controller.ListReviewCommentsHandler)
+	v1.POST("/reviews/:id/comments", middlewares.JWTAuthMiddleware(), controller.AddReviewCommentHandler)
+	v1.POST("/reviews/:id/decision", middlewares.JWTAuthMiddleware(), controller.DecideReviewHandler)
+
 	// 举报（登录用户）
 	v1.POST("/reports", middlewares.JWTAuthMiddleware(), controller.CreateReportHandler)
 

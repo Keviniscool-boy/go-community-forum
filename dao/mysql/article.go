@@ -79,6 +79,21 @@ func SoftDeleteArticle(articleID, authorID int64) (bool, error) {
 	return n > 0, nil
 }
 
+// SetArticleCollabState 更新文章协作审阅状态
+func SetArticleCollabState(articleID int64, state int32, approvedRevisionID int64) error {
+	_, err := db.Exec(
+		"UPDATE article SET collab_state = ?, approved_revision_id = ? WHERE article_id = ?",
+		state, approvedRevisionID, articleID)
+	return err
+}
+
+// GetArticleRevisionByNo 按版本号查询
+func GetArticleRevisionByNo(articleID int64, revisionNo int64) (*models.ArticleRevision, error) {
+	r := new(models.ArticleRevision)
+	err := db.Get(r, "SELECT revision_id, article_id, revision_no, title, body, author_id, content_hash, create_time FROM article_revision WHERE article_id = ? AND revision_no = ?", articleID, revisionNo)
+	return r, err
+}
+
 // IncrementArticleViewCount 浏览量自增
 func IncrementArticleViewCount(articleID int64) error {
 	_, err := db.Exec("UPDATE article SET view_count = view_count + 1 WHERE article_id = ?", articleID)

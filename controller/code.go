@@ -46,6 +46,8 @@ const (
 	CodeColumnNotExist    ResCode = 1031
 	CodePreferenceConflict ResCode = 1032
 	CodeAppealConflict    ResCode = 1033
+	CodeSeriesOrderConflict ResCode = 1034
+	CodeReviewPending     ResCode = 1035
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -83,6 +85,8 @@ var codeMsgMap = map[ResCode]string{
 	CodeColumnNotExist:     "专栏不存在",
 	CodePreferenceConflict: "设置版本冲突，请刷新后重试",
 	CodeAppealConflict:     "该内容已有进行中的申诉",
+	CodeSeriesOrderConflict: "目录版本冲突，请刷新后重试",
+	CodeReviewPending:      "该版本已有进行中的审阅",
 }
 
 // 创建一个函数，传入code返回msg

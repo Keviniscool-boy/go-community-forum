@@ -15,6 +15,8 @@ type Article struct {
 	Status           int32     `json:"status" db:"status"`
 	ModerationStatus int32     `json:"moderation_status" db:"moderation_status"`
 	Visibility       int32     `json:"visibility" db:"visibility"`
+	CollabState      int32     `json:"collab_state" db:"collab_state"`
+	ApprovedRevisionID int64   `json:"approved_revision_id,string" db:"approved_revision_id"`
 	DeletedAt        *time.Time `json:"-" db:"deleted_at"`
 	UpdateTime       time.Time `json:"update_time" db:"update_time"`
 	CreateTime       time.Time `json:"create_time" db:"create_time"`
