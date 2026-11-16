@@ -132,6 +132,9 @@ func Setup() *gin.Engine {
 		adminGroup.POST("/reports/:id/resolve", controller.ResolveReportHandler)
 		adminGroup.POST("/content/:type/:id/:action", controller.ModerateContentHandler)
 		adminGroup.GET("/audit-logs", controller.ListAuditLogsHandler)
+		adminGroup.GET("/sensitive-words", controller.ListSensitiveWordsHandler)
+		adminGroup.POST("/sensitive-words", controller.AddSensitiveWordHandler)
+		adminGroup.DELETE("/sensitive-words", controller.RemoveSensitiveWordHandler)
 		adminGroup.GET("/metrics/overview", controller.AdminMetricsHandler)
 	}
 	adminOnly := v1.Group("/admin")

@@ -196,3 +196,35 @@ func TestEventDedup(t *testing.T) {
 
 var _ = errors.Is
 var _ = time.Now
+
+// TestLoadSensitiveWordsErrorPropagation 词表表缺失时加载必须返回错误
+// （logic 层 CheckContentModeration 收到该错误后 fail-closed 拒绝发布，规格 15.1）
+func TestLoadSensitiveWordsErrorPropagation(t *testing.T) {
+	root := requireMySQL(t)
+	fullName := createTempDB(t, root, "wordserr")
+	switchToTempDB(t, fullName)
+
+	// 不建 sensitive_word 表
+	_, ver, err := LoadSensitiveWords()
+	if err == nil {
+		t.Fatal("expected error when sensitive_word table missing")
+	}
+	if ver != 0 {
+		t.Fatalf("version should be 0 on error, got %d", ver)
+	}
+
+	// 建表后加载成功且为空词表
+	mustExec(t, `CREATE TABLE sensitive_word (
+		id bigint NOT NULL AUTO_INCREMENT, word varchar(128) NOT NULL,
+		word_type tinyint NOT NULL DEFAULT 0, enabled tinyint NOT NULL DEFAULT 1,
+		version bigint NOT NULL DEFAULT 1, created_by bigint NULL,
+		create_time timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (id), UNIQUE KEY uk_word (word)) ENGINE=InnoDB`)
+	words, ver, err := LoadSensitiveWords()
+	if err != nil {
+		t.Fatalf("load after create table: %v", err)
+	}
+	if len(words) != 0 || ver != 0 {
+		t.Fatalf("empty word table: words=%d ver=%d", len(words), ver)
+	}
+}

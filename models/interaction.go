@@ -76,6 +76,7 @@ type ApiNotificationDetail struct {
 	*Notification
 	ActorName string `json:"actor_name"`
 	Excerpt   string `json:"excerpt"`
+	AggCount  int    `json:"agg_count,omitempty"` // 同目标同类型聚合条数（仅展示层聚合，>1 时前端显示"某某等 N 人"）
 }
 
 // FeedAuthor Feed 条目的作者信息

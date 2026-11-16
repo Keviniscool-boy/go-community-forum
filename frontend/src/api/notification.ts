@@ -12,6 +12,7 @@ export interface NotificationDetail {
   is_read: boolean
   create_time: string
   excerpt: string
+  agg_count?: number // 聚合条数（>1 时显示"某某等 N 人"）
 }
 
 export function fetchNotifications(cursor = '', limit = 20) {

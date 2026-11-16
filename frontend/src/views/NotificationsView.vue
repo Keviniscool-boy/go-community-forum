@@ -60,7 +60,9 @@ const typeIcon = (t: number) =>
       >
         <span class="notif-icon">{{ typeIcon(n.type) }}</span>
         <div class="notif-body">
-          <span class="notif-text"><strong>{{ n.actor_name }}</strong> {{ n.excerpt }}</span>
+          <span class="notif-text">
+            <strong>{{ n.actor_name }}</strong>{{ (n.agg_count || 1) > 1 ? ` 等 ${n.agg_count} 人` : '' }} {{ n.excerpt }}
+          </span>
           <span class="notif-time">{{ n.create_time?.slice(0, 16).replace('T', ' ') }}</span>
         </div>
         <span v-if="!n.is_read" class="unread-dot"></span>

@@ -50,13 +50,23 @@ func ListNotifications(userID int64, cursor string, limit int) (*models.PageResu
 	for _, u := range users {
 		actorMap[u.UserID] = u
 	}
+	// 展示层聚合（规格 10.1）：同批次内 type=赞同 且目标相同的通知合并为"某某等 N 人"，
+	// 不改变原始记录与审计事实；跨页不聚合
 	items := make([]*models.ApiNotificationDetail, 0, len(ns))
 	var last *models.Notification
 	for _, n := range ns {
+		if n.Type == models.NotifyTypeLike && len(items) > 0 {
+			prev := items[len(items)-1]
+			if prev.Type == models.NotifyTypeLike && prev.TargetType == n.TargetType && prev.TargetID == n.TargetID {
+				prev.AggCount++
+				continue
+			}
+		}
 		last = n
 		detail := &models.ApiNotificationDetail{
 			Notification: n,
 			Excerpt:      notifyText(n.Type),
+			AggCount:     1,
 		}
 		if u := actorMap[n.ActorID]; u != nil {
 			detail.ActorName = u.Username
