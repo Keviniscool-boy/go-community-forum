@@ -236,3 +236,7 @@ func MetricsOverview() (map[string]interface{}, error) {
 	return m, nil
 }
 
+// AggregateMetrics 触发内容逐日指标聚合（幂等；metric_version 递增支持重算）
+func AggregateMetrics(days int) (int, error) {
+	return mysql.AggregateContentDailyMetrics(days)
+}

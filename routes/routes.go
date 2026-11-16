@@ -190,6 +190,7 @@ func Setup() *gin.Engine {
 		dm.POST("/:id/read", controller.MarkConversationReadHandler)
 	}
 	v1.POST("/messages/:id/report", middlewares.JWTAuthMiddleware(), controller.ReportMessageHandler)
+	v1.DELETE("/me/account", middlewares.JWTAuthMiddleware(), controller.DeleteAccountHandler)
 	v1.GET("/me/message-settings", middlewares.JWTAuthMiddleware(), controller.GetPrivacySettingsHandler)
 	v1.PUT("/me/message-settings", middlewares.JWTAuthMiddleware(), controller.PutPrivacySettingsHandler)
 
@@ -209,6 +210,7 @@ func Setup() *gin.Engine {
 		adminGroup.POST("/sensitive-words", controller.AddSensitiveWordHandler)
 		adminGroup.DELETE("/sensitive-words", controller.RemoveSensitiveWordHandler)
 		adminGroup.GET("/metrics/overview", controller.AdminMetricsHandler)
+		adminGroup.POST("/metrics/aggregate", controller.AdminAggregateMetricsHandler)
 	}
 	adminOnly := v1.Group("/admin")
 	adminOnly.Use(middlewares.JWTAuthMiddleware(), middlewares.RequireRoleMiddleware(models.RoleAdmin))

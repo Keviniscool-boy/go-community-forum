@@ -43,7 +43,7 @@ func requireRedis(t *testing.T) {
 func TestVerifyCodeAtomic(t *testing.T) {
 	requireRedis(t)
 	email := uniqueEmail("atomic")
-	code, err := SendAuthCode(email, "register", "127.0.0.1")
+	code, err := SendAuthCode(email, "register", "ip-atomic")
 	if err != nil {
 		t.Fatalf("send code: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestVerifyCodeAtomic(t *testing.T) {
 func TestVerifyCodeAttempts(t *testing.T) {
 	requireRedis(t)
 	email := uniqueEmail("attempts")
-	if _, err := SendAuthCode(email, "register", "127.0.0.1"); err != nil {
+	if _, err := SendAuthCode(email, "register", "ip-attempts"); err != nil {
 		t.Fatalf("send code: %v", err)
 	}
 
@@ -101,10 +101,10 @@ func TestVerifyCodeAttempts(t *testing.T) {
 func TestSendCodeRateLimit(t *testing.T) {
 	requireRedis(t)
 	email := uniqueEmail("ratelimit")
-	if _, err := SendAuthCode(email, "register", "9.9.9.9"); err != nil {
+	if _, err := SendAuthCode(email, "register", "ip-rl1"); err != nil {
 		t.Fatalf("first send: %v", err)
 	}
-	if _, err := SendAuthCode(email, "register", "9.9.9.9"); !errors.Is(err, ErrCodeSendTooFrequent) {
+	if _, err := SendAuthCode(email, "register", "ip-rl1"); !errors.Is(err, ErrCodeSendTooFrequent) {
 		t.Fatalf("second send should be rate limited, got %v", err)
 	}
 }

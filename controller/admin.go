@@ -185,3 +185,19 @@ func AdminMetricsHandler(c *gin.Context) {
 	}
 	ResponseSuccess(c, data)
 }
+
+// AdminAggregateMetricsHandler 触发内容逐日指标聚合（幂等重算，metric_version 递增）
+func AdminAggregateMetricsHandler(c *gin.Context) {
+	if _, err := getCurrentUserID(c); err != nil {
+		ResponseError(c, CodeNeedLogin)
+		return
+	}
+	days := atoiDefault(c.Query("days"), 30)
+	version, err := logic.AggregateMetrics(days)
+	if err != nil {
+		zap.L().Error("logic.AggregateMetrics failed", zap.Error(err))
+		ResponseError(c, CodeServerBusy)
+		return
+	}
+	ResponseSuccess(c, gin.H{"metric_version": version})
+}

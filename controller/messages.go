@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -326,9 +327,37 @@ func ReportMessageHandler(c *gin.Context) {
 		ResponseError(c, CodeServerBusy)
 		return
 	}
+	// 举报成立前先保存加密证据快照（规格 3.5：证据含消息快照，加密存储）
+	retainUntil := time.Now().UTC().Add(365 * 24 * time.Hour)
+	if err := mysql.SaveMessageEvidence(r.ReportID, messageID, m.Body, retainUntil); err != nil {
+		zap.L().Error("save message evidence failed", zap.Error(err))
+	}
 	if dup {
 		ResponseSuccess(c, gin.H{"duplicated": true})
 		return
 	}
+	ResponseSuccess(c, nil)
+}
+
+// DeleteAccountHandler 注销账号（去标识化）
+func DeleteAccountHandler(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ResponseError(c, CodeNeedLogin)
+		return
+	}
+	var req struct {
+		Confirm string `json:"confirm" binding:"required,eq=DELETE"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		ResponseErrorWithMsg(c, CodeInvalidParams, "请携带 confirm=\"DELETE\" 确认")
+		return
+	}
+	if err := logic.DeactivateAccount(userID); err != nil {
+		zap.L().Error("logic.DeactivateAccount failed", zap.Error(err))
+		ResponseError(c, CodeServerBusy)
+		return
+	}
+	// 清除本地登录态由前端完成；服务端 token 已全部失效
 	ResponseSuccess(c, nil)
 }

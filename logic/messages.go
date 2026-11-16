@@ -282,3 +282,8 @@ func dmIncrRateLimit(key string, ttlSeconds int) (int64, error) {
 	}
 	return cnt, nil
 }
+
+// DeactivateAccount 注销账号（去标识化；规格 9.5）
+func DeactivateAccount(userID int64) error {
+	return mysql.DeactivateAccountAnonymized(userID)
+}

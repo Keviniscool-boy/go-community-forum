@@ -108,6 +108,11 @@ func main() {
 		return
 	}
 
+	// 6.041 注入 token 版本缓存失效函数（账号注销去标识化时调用）
+	mysql.SetTokenVerCacheInvalidator(func(userID int64) {
+		redis.InvalidateTokenVersionCache(userID)
+	})
+
 	// 6.05 搜索实现：MySQL fallback（生产可替换 ES 适配器）
 	controller.InitSearchIndex(&search.MySQLFallback{DB: mysql.GetDB()})
 
