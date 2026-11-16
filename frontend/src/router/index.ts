@@ -31,6 +31,7 @@ const router = createRouter({
         { path: 'articles/:id/edit', name: 'article-edit', component: () => import('@/views/ArticleEditorView.vue'), meta: { title: '编辑文章', requiresAuth: true } },
         { path: 'columns', name: 'columns', component: () => import('@/views/ColumnsView.vue'), meta: { title: '专栏' } },
         { path: 'columns/:id', name: 'column-detail', component: () => import('@/views/ColumnDetailView.vue'), meta: { title: '专栏详情' } },
+        { path: 'series/:id', name: 'series-detail', component: () => import('@/views/SeriesView.vue'), meta: { title: '系列' } },
         { path: 'search', name: 'search', component: () => import('@/views/SearchView.vue'), meta: { title: '搜索' } },
         { path: 'drafts', name: 'drafts', component: () => import('@/views/DraftsView.vue'), meta: { title: '草稿箱', requiresAuth: true } },
         { path: 'bookmarks', name: 'bookmarks', component: () => import('@/views/BookmarksView.vue'), meta: { title: '收藏夹', requiresAuth: true } },

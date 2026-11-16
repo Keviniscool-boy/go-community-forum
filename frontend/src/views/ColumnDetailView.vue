@@ -7,6 +7,7 @@ import {
   fetchColumn, fetchColumnArticles, updateColumn, deleteColumn,
   type ColumnDetail, type ArticleDetail,
 } from '@/api/article'
+import { createSeries, listSeriesForColumn, type Series } from '@/api/collab'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/api/http'
 import LoadingState from '@/components/LoadingState.vue'
@@ -20,6 +21,9 @@ const auth = useAuthStore()
 const columnId = route.params.id as string
 const column = ref<ColumnDetail | null>(null)
 const articles = ref<ArticleDetail[]>([])
+const seriesList = ref<Series[]>([])
+const newSeriesTitle = ref('')
+const creatingSeries = ref(false)
 const loading = ref(false)
 const error = ref('')
 
@@ -35,6 +39,11 @@ async function load() {
   try {
     column.value = await fetchColumn(columnId)
     articles.value = (await fetchColumnArticles(columnId)) || []
+    try {
+      seriesList.value = (await listSeriesForColumn(columnId)) || []
+    } catch {
+      seriesList.value = []
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : '加载失败'
   } finally {
@@ -61,6 +70,20 @@ async function submitEdit() {
     if (e instanceof ApiError) ElMessage.error(e.message)
   } finally {
     editSubmitting.value = false
+  }
+}
+
+async function onCreateSeries() {
+  if (!newSeriesTitle.value.trim()) return ElMessage.warning('请输入系列标题')
+  creatingSeries.value = true
+  try {
+    const res = await createSeries(columnId, { title: newSeriesTitle.value.trim(), description: '' })
+    ElMessage.success('系列已创建')
+    router.push(`/series/${res.series_id}`)
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    creatingSeries.value = false
   }
 }
 
@@ -103,7 +126,20 @@ onMounted(load)
       </div>
 
       <div class="bb-card column-articles-header">
-        <h3>目录</h3>
+        <h3>系列</h3>
+        <div class="series-create-row">
+          <el-input v-model="newSeriesTitle" size="small" placeholder="新系列标题" maxlength="100" style="width: 220px" />
+          <el-button size="small" type="primary" :loading="creatingSeries" @click="onCreateSeries">创建系列</el-button>
+        </div>
+      </div>
+      <div v-if="seriesList.length > 0" class="bb-card series-list">
+        <router-link v-for="s in seriesList" :key="s.id" class="series-row" :to="`/series/${s.id}`">
+          <span class="series-name">{{ s.title }}</span>
+          <span class="series-arrow">→</span>
+        </router-link>
+      </div>
+      <div class="bb-card column-articles-header">
+        <h3>文章目录</h3>
         <el-button v-if="isOwner" type="primary" size="small" @click="router.push('/articles/new')">
           写新文章
         </el-button>
@@ -160,5 +196,13 @@ onMounted(load)
 .catalog-title { flex: 1; font-weight: 600; color: var(--bb-text-main);
   &:hover { color: var(--bb-primary); } }
 .catalog-meta { color: var(--bb-text-tertiary); font-size: 12px; }
+.series-create-row { display: flex; gap: 8px; align-items: center; }
+.series-list { padding: 8px 16px; margin-bottom: 12px; }
+.series-row {
+  display: flex; justify-content: space-between; padding: 8px 4px;
+  color: var(--bb-text-main); border-bottom: 1px solid var(--bb-border);
+  &:last-child { border-bottom: none; }
+  &:hover .series-name { color: var(--bb-primary); }
+}
 @media (max-width: 768px) { .column-header { padding: 16px; } }
 </style>
