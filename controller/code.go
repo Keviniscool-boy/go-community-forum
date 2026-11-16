@@ -42,6 +42,8 @@ const (
 	CodeResetTokenInvalid ResCode = 1027
 	CodeEmailConflict     ResCode = 1028
 	CodeDraftConflict     ResCode = 1029
+	CodeArticleNotExist   ResCode = 1030
+	CodeColumnNotExist    ResCode = 1031
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -75,6 +77,8 @@ var codeMsgMap = map[ResCode]string{
 	CodeResetTokenInvalid:  "重置凭据无效或已过期",
 	CodeEmailConflict:      "该邮箱已被其他账号使用",
 	CodeDraftConflict:      "草稿版本冲突，请刷新后重试",
+	CodeArticleNotExist:    "文章不存在",
+	CodeColumnNotExist:     "专栏不存在",
 }
 
 // 创建一个函数，传入code返回msg

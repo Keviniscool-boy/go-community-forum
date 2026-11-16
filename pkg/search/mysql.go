@@ -46,8 +46,8 @@ func (m *MySQLFallback) Search(ctx context.Context, q Query) (Result, error) {
 		limit = 20
 	}
 	limit++
-	scopes := map[string]bool{"question": true, "answer": true, "user": true, "topic": true}
-	selected := []string{"question", "answer", "user", "topic"}
+	scopes := map[string]bool{"question": true, "answer": true, "user": true, "topic": true, "article": true}
+	selected := []string{"question", "answer", "article", "user", "topic"}
 	if q.Scope != "all" && scopes[q.Scope] {
 		selected = []string{q.Scope}
 	}
@@ -75,6 +75,16 @@ func (m *MySQLFallback) Search(ctx context.Context, q Query) (Result, error) {
 			WHERE %s AND (q.title LIKE ? OR q.description LIKE ?) LIMIT %d)`, questionVisible, perScopeLimit)
 		union += " UNION ALL "
 	case false:
+	}
+	if contains(selected, "article") {
+		union += fmt.Sprintf(`(SELECT 'article' AS item_type, a.article_id AS item_id, a.title AS title,
+			LEFT(a.content, 200) AS excerpt, a.author_id AS author_id,
+			(CASE WHEN a.title LIKE ? THEN 3 ELSE 0 END + CASE WHEN a.content LIKE ? THEN 1 ELSE 0 END) AS score,
+			UNIX_TIMESTAMP(a.create_time) AS create_time
+			FROM article a JOIN user u ON u.user_id = a.author_id AND u.status = 1
+			WHERE a.status = 1 AND a.moderation_status = 1 AND a.visibility = 1 AND a.deleted_at IS NULL
+			AND (a.title LIKE ? OR a.content LIKE ?) LIMIT %d)`, perScopeLimit)
+		union += " UNION ALL "
 	}
 	if contains(selected, "answer") {
 		union += fmt.Sprintf(`(SELECT 'answer' AS item_type, a.answer_id AS item_id, qu.title AS title,
@@ -117,6 +127,9 @@ func (m *MySQLFallback) Search(ctx context.Context, q Query) (Result, error) {
 	}
 	// 逐段注入参数（与上面 CASE 顺序一致）
 	if contains(selected, "question") {
+		addLikes(4)
+	}
+	if contains(selected, "article") {
 		addLikes(4)
 	}
 	if contains(selected, "answer") {

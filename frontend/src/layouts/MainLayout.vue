@@ -2,7 +2,7 @@
 // 主布局：顶部导航 + 左侧导航 + 中间内容 + 右侧边栏
 // 移动端（<768px）隐藏两侧栏，Feed 单列显示
 import { ref } from 'vue'
-import { HomeFilled, EditPen, Compass, TrendCharts, Document, Star, Clock, Setting } from '@element-plus/icons-vue'
+import { HomeFilled, EditPen, Compass, TrendCharts, Document, Star, Clock, Setting, Notebook, Collection } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import TopNav from '@/components/TopNav.vue'
 
@@ -28,6 +28,12 @@ const isMobileSidebarVisible = ref(false)
           </router-link>
           <router-link class="side-link" to="/questions/ask">
             <el-icon><EditPen /></el-icon><span>提问</span>
+          </router-link>
+          <router-link class="side-link" to="/articles">
+            <el-icon><Notebook /></el-icon><span>文章</span>
+          </router-link>
+          <router-link class="side-link" to="/columns">
+            <el-icon><Collection /></el-icon><span>专栏</span>
           </router-link>
           <router-link class="side-link" to="/drafts">
             <el-icon><Document /></el-icon><span>草稿箱</span>

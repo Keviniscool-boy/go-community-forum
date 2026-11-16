@@ -50,13 +50,13 @@ export interface CommentDetail {
   create_time: string
 }
 
-export function fetchComments(targetType: 'answer' | 'question', targetId: string, cursor = '', limit = 20) {
+export function fetchComments(targetType: 'answer' | 'question' | 'article', targetId: string, cursor = '', limit = 20) {
   return http.get<import('./feed').PageResult<CommentDetail>>('comments', {
     params: { target_type: targetType, target_id: targetId, cursor, limit },
   })
 }
 
-export function createComment(targetType: 'answer' | 'question', targetId: string, content: string, parentId?: string) {
+export function createComment(targetType: 'answer' | 'question' | 'article', targetId: string, content: string, parentId?: string) {
   return http.post<{ comment_id: string }>('comments', {
     target_type: targetType,
     target_id: targetId,

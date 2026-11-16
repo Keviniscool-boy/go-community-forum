@@ -89,6 +89,21 @@ func Setup() *gin.Engine {
 	v1.GET("/search", controller.SearchHandler)
 	v1.GET("/search/suggestions", controller.SearchSuggestionsHandler)
 
+	// 文章（OptionalAuth 详情/列表公开）
+	v1.POST("/articles", middlewares.JWTAuthMiddleware(), controller.CreateArticleHandler)
+	v1.GET("/articles", controller.ListArticlesHandler)
+	v1.GET("/articles/:id", middlewares.OptionalAuthMiddleware(), controller.GetArticleDetailHandler)
+	v1.PATCH("/articles/:id", middlewares.JWTAuthMiddleware(), controller.EditArticleHandler)
+	v1.DELETE("/articles/:id", middlewares.JWTAuthMiddleware(), controller.DeleteArticleHandler)
+
+	// 专栏
+	v1.POST("/columns", middlewares.JWTAuthMiddleware(), controller.CreateColumnHandler)
+	v1.GET("/columns", controller.ListColumnsHandler)
+	v1.GET("/columns/:id", controller.GetColumnDetailHandler)
+	v1.GET("/columns/:id/articles", controller.ListColumnArticlesHandler)
+	v1.PATCH("/columns/:id", middlewares.JWTAuthMiddleware(), controller.EditColumnHandler)
+	v1.DELETE("/columns/:id", middlewares.JWTAuthMiddleware(), controller.DeleteColumnHandler)
+
 	// 举报（登录用户）
 	v1.POST("/reports", middlewares.JWTAuthMiddleware(), controller.CreateReportHandler)
 

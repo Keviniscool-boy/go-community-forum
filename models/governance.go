@@ -183,3 +183,10 @@ type RecommendationEvent struct {
 }
 
 // RenderMarkdownSafe logic 层包装 sanitizer（避免 controller 直接依赖 pkg 内部实现细节）
+
+// ArticlePage 文章分页响应（Swagger）
+type ArticlePage struct {
+	Items      []*ApiArticleDetail `json:"items"`
+	NextCursor string              `json:"next_cursor"`
+	HasMore    bool                `json:"has_more"`
+}

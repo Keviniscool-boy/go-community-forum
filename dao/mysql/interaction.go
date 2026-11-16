@@ -328,6 +328,13 @@ func CreateComment(cm *models.Comment) error {
 			}
 			return err
 		}
+	case models.TargetArticle:
+		if err = tx.Get(&targetAuthor, "SELECT author_id FROM article WHERE article_id = ? FOR UPDATE", cm.TargetID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrArticleNotExist
+			}
+			return err
+		}
 	default:
 		return ErrInvalidParams
 	}
@@ -345,6 +352,8 @@ func CreateComment(cm *models.Comment) error {
 		if _, err = tx.Exec("UPDATE question SET comment_count = comment_count + 1 WHERE question_id = ?", cm.TargetID); err != nil {
 			return err
 		}
+	case models.TargetArticle:
+		// 文章表无 comment_count 冗余列，计数按关系表查询；通知照发
 	}
 	if err := txCreateNotification(tx, targetAuthor, cm.UserID, models.NotifyTypeComment, cm.TargetType, cm.TargetID); err != nil {
 		return err

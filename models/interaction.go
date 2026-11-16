@@ -4,8 +4,9 @@ import "time"
 
 // 评论目标类型（存储用 tinyint，JSON 交互用字符串）
 const (
-	TargetAnswer  = 1
+	TargetAnswer   = 1
 	TargetQuestion = 2
+	TargetArticle  = 3
 )
 
 // TargetTypeToCode 字符串目标类型转存储编码，非法返回 0
@@ -15,6 +16,8 @@ func TargetTypeToCode(s string) int32 {
 		return TargetAnswer
 	case "question":
 		return TargetQuestion
+	case "article":
+		return TargetArticle
 	}
 	return 0
 }
