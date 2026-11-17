@@ -304,7 +304,8 @@ func ListRevisions(userID, articleID int64) ([]*models.ArticleRevision, error) {
 	return mysql.ListArticleRevisions(articleID, 100)
 }
 
-// RestoreRevision 恢复历史版本为新草稿（不覆盖已发布正文：直接更新文章并创建新版本）
+// RestoreRevision 恢复历史版本为新草稿（B03：baseVersion CAS 校验，
+// 与当前最新版本号不一致说明存在并发保存，拒绝并让用户手动合并，绝不静默覆盖）
 func RestoreRevision(userID, articleID, revisionID int64, baseVersion int64) (*models.ArticleRevision, error) {
 	a, err := mysql.GetArticleByID(articleID)
 	if err != nil {
@@ -317,7 +318,15 @@ func RestoreRevision(userID, articleID, revisionID int64, baseVersion int64) (*m
 	if err != nil || rev.ArticleID != articleID {
 		return nil, mysql.ErrArticleNotExist
 	}
-	// 恢复 = 以旧内容创建新版本（不覆盖历史）
+	// B03 CAS：baseVersion 必须等于当前最新版本号
+	maxNo, err := mysql.GetMaxRevisionNo(articleID)
+	if err != nil {
+		return nil, err
+	}
+	if baseVersion != maxNo {
+		return nil, ErrRevisionConflict
+	}
+	// 恢复 = 以旧内容创建新版本（追加，不覆盖历史）
 	return SaveRevision(userID, articleID, rev.Title, rev.Body)
 }
 

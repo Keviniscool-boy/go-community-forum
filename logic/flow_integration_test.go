@@ -187,11 +187,11 @@ func TestB02PendingSingleFirstMessage(t *testing.T) {
 		t.Fatalf("reply after accept: %v", err)
 	}
 
-	// 拒绝冷却：新建会话 → 接收方拒绝 → 立即重发起被冷却拒绝
+	// 拒绝冷却：新建会话（user 3 → user 1）→ 接收方拒绝 → 立即重发起被冷却拒绝
 	mustExecFlow(t, temp, "INSERT INTO user (user_id, username, email) VALUES (3,'c','c@t')")
 	mustExecFlow(t, temp, "INSERT INTO user_follow (follower_id, following_id) VALUES (3, 1), (1, 3)")
 	conv3, _, err := StartConversation(3, &models.ParamStartConversation{
-		RecipientID: "3", Body: "hello", ClientMessageID: "m3"})
+		RecipientID: "1", Body: "hello", ClientMessageID: "m3"})
 	if err != nil {
 		t.Fatalf("conv3 start: %v", err)
 	}
@@ -221,21 +221,22 @@ func TestB03BaseVersionConflict(t *testing.T) {
 	mustExecFlow(t, temp, "INSERT INTO user (user_id, username, email) VALUES (1,'author','a@t')")
 	mustExecFlow(t, temp, "INSERT INTO article (article_id, author_id, title, content) VALUES (10, 1, 't', 'v1')")
 
+	// 创建两个版本
 	rev1, err := SaveRevision(1, 10, "t", "v1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	rev2, err := SaveRevision(1, 10, "t", "v2")
+	_, err = SaveRevision(1, 10, "t", "v2")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// baseVersion 错填 1（当前最新是 2）→ 冲突
+	// baseVersion=1 过时（当前 maxNo=2）→ ErrRevisionConflict
 	_, err = RestoreRevision(1, 10, rev1.RevisionID, 1)
 	if !errors.Is(err, ErrRevisionConflict) {
 		t.Fatalf("expected ErrRevisionConflict, got %v", err)
 	}
-	// baseVersion 正确（2）→ 恢复成功产生 v3
-	rev3, err := RestoreRevision(1, 10, rev2.RevisionID, 2)
+	// baseVersion=2（正确）→ 恢复 rev1 内容为新版本
+	rev3, err := RestoreRevision(1, 10, rev1.RevisionID, 2)
 	if err != nil {
 		t.Fatalf("restore: %v", err)
 	}
