@@ -309,7 +309,8 @@ func ListArticleRevisionsHandler(c *gin.Context) {
 }
 
 type restoreRequest struct {
-	RevisionID string `json:"revision_id" binding:"required"`
+	RevisionID  string `json:"revision_id" binding:"required"`
+	BaseVersion int64  `json:"base_version" binding:"required,min=1"`
 }
 
 // RestoreRevisionHandler 恢复历史版本为新草稿版本
@@ -334,9 +335,13 @@ func RestoreRevisionHandler(c *gin.Context) {
 		ResponseError(c, CodeInvalidParams)
 		return
 	}
-	rev, err := logic.RestoreRevision(userID, articleID, revID, 0)
+	rev, err := logic.RestoreRevision(userID, articleID, revID, req.BaseVersion)
 	if err != nil {
 		zap.L().Error("logic.RestoreRevision failed", zap.Error(err))
+		if errors.Is(err, logic.ErrRevisionConflict) {
+			ResponseError(c, CodeRevisionConflict)
+			return
+		}
 		if errors.Is(err, logic.ErrForbidden) {
 			ResponseError(c, CodeForbidden)
 			return

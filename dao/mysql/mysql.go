@@ -66,7 +66,7 @@ func GetDB() *sqlx.DB {
 	return db
 }
 
-// setGlobalDB 测试用：替换全局数据库连接（migrate_test.go 使用）
+// setGlobalDB 内部使用（migrate_test.go / logic 集成测试经 SetGlobalDB 调用）
 func setGlobalDB(d *sqlx.DB) {
 	db = d
 }
@@ -82,4 +82,9 @@ func LatestMigrationVersion(ctx context.Context) (int, error) {
 	err := db.GetContext(ctx, &v,
 		"SELECT COALESCE(MAX(version), -1) FROM schema_migrations")
 	return v, err
+}
+
+// SetGlobalDB 测试与运维工具用：替换全局数据库连接（导出别名，复用 setGlobalDB）
+func SetGlobalDB(d *sqlx.DB) {
+	setGlobalDB(d)
 }

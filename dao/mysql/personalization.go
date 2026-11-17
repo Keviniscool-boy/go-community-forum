@@ -129,13 +129,15 @@ func SetRecommendationPreference(userID int64, enabled bool, expectVersion int64
 	} else if err != nil {
 		return 0, err
 	} else {
-		if cur != expectVersion {
-			return 0, ErrPreferenceConflict
-		}
-		if _, err = tx.Exec(
-			"UPDATE recommendation_preference SET personalization_enabled = ?, version = version + 1 WHERE user_id = ?",
-			enabled, userID); err != nil {
+		// B05 真正的 CAS：条件更新带版本，受影响行 0 即并发冲突（避免读改写竞态）
+		result, err := tx.Exec(
+			"UPDATE recommendation_preference SET personalization_enabled = ?, version = version + 1 WHERE user_id = ? AND version = ?",
+			enabled, userID, expectVersion)
+		if err != nil {
 			return 0, err
+		}
+		if n, _ := result.RowsAffected(); n == 0 {
+			return 0, ErrPreferenceConflict
 		}
 	}
 	if err = tx.Get(&newVersion, "SELECT version FROM recommendation_preference WHERE user_id = ?", userID); err != nil {

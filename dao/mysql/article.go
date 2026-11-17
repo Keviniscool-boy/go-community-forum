@@ -25,7 +25,7 @@ func CreateArticle(a *models.Article, moderationStatus int32) error {
 // GetArticleByID 内部用途：status=1 校验（作者编辑等）
 func GetArticleByID(id int64) (*models.Article, error) {
 	a := new(models.Article)
-	err := db.Get(a, `SELECT article_id, author_id, column_id, title, content, view_count,
+	err := db.Get(a, `SELECT article_id, author_id, COALESCE(column_id, 0) AS column_id, title, content, view_count,
 		status, moderation_status, visibility, deleted_at, update_time, create_time
 		FROM article WHERE article_id = ? AND status = 1`, id)
 	if err != nil {
@@ -40,7 +40,7 @@ func GetArticleByID(id int64) (*models.Article, error) {
 // GetArticlePublicByID 公开详情：统一治理可见条件（author_only 仅作者本人）
 func GetArticlePublicByID(id int64, viewerID int64) (*models.Article, error) {
 	a := new(models.Article)
-	err := db.Get(a, `SELECT a.article_id, a.author_id, a.column_id, a.title, a.content, a.view_count,
+	err := db.Get(a, `SELECT a.article_id, a.author_id, COALESCE(a.column_id, 0) AS column_id, a.title, a.content, a.view_count,
 		a.status, a.moderation_status, a.visibility, a.deleted_at, a.update_time, a.create_time
 		FROM article a JOIN user u ON u.user_id = a.author_id AND u.status = 1
 		WHERE a.article_id = ? AND a.status = 1
@@ -129,7 +129,7 @@ func ListArticles(cursorTime sql.NullTime, cursorID int64, limit int) (articles 
 // ListArticlesByColumn 专栏下的文章（读者视图：公开；作者视图含全部）
 func ListArticlesByColumn(columnID int64, viewerID int64, limit int) (articles []*models.Article, err error) {
 	articles = make([]*models.Article, 0, limit)
-	err = db.Select(&articles, `SELECT article_id, author_id, column_id, title, content, view_count,
+	err = db.Select(&articles, `SELECT article_id, author_id, COALESCE(column_id, 0) AS column_id, title, content, view_count,
 		status, moderation_status, visibility, deleted_at, update_time, create_time
 		FROM article WHERE column_id = ? AND status = 1 AND moderation_status = 1 AND deleted_at IS NULL
 		AND (visibility = 1 OR (visibility = 2 AND author_id = ?))

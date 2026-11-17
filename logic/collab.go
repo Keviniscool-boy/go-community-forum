@@ -15,6 +15,7 @@ import (
 // ---------- 协作创作 ----------
 
 var (
+	ErrRevisionConflict = errors.New("版本冲突，请刷新后重试")
 	ErrSeriesNotExist   = errors.New("系列不存在")
 	ErrNotColumnMember  = errors.New("不是专栏成员")
 	ErrOwnerOnly        = errors.New("仅专栏所有者可执行")
@@ -375,24 +376,21 @@ func DecideReview(userID, reviewID int64, p *models.ParamReviewDecision) error {
 	if err != nil || revID != r.RevisionID {
 		return ErrArticleInvalid // 版本绑定不匹配
 	}
-	decision := int32(2) // changes_requested
+	// B04：审阅决定、pending 标记清理与文章协作状态在同一事务（原为两个调用，故障时状态分叉）
+	var decision int32 = 2 // changes_requested
 	if p.Decision == "approve" {
 		decision = int32(1)
 	}
-	ok, err := mysql.SetReviewDecision(reviewID, revID, decision)
+	var newCollab int32 = models.CollabChangesRequested
+	if decision == 1 {
+		newCollab = models.CollabApproved
+	}
+	ok, err := mysql.SetReviewDecisionAtomic(reviewID, revID, decision, r.ArticleID, newCollab)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return ErrAdminConflict
-	}
-	// 更新文章协作状态
-	var newCollab int32 = models.CollabChangesRequested
-	if decision == 1 {
-		newCollab = models.CollabApproved
-	}
-	if err := mysql.SetArticleCollabState(r.ArticleID, newCollab, revID); err != nil {
-		return err
 	}
 	return nil
 }

@@ -413,6 +413,17 @@ func GetCommentByID(id int64) (*models.Comment, error) {
 
 // ---------- 通知 ----------
 
+// CreateNotification 独立写入通知（outbox worker 使用；自己给自己的动作不通知）
+func CreateNotification(n *models.Notification) error {
+	if n.UserID == n.ActorID {
+		return nil
+	}
+	_, err := db.Exec(
+		"INSERT INTO notification (notification_id, user_id, actor_id, type, target_type, target_id) VALUES (?, ?, ?, ?, ?, ?)",
+		n.NotificationID, n.UserID, n.ActorID, n.Type, n.TargetType, n.TargetID)
+	return err
+}
+
 // txCreateNotification 在互动事务内写入通知（自己给自己的动作不通知）
 // 通知与互动同事务：要么都成功要么都回滚，不允许先返回成功再静默丢通知
 func txCreateNotification(tx *sqlx.Tx, userID, actorID int64, notifyType int32, targetType int32, targetID int64) error {

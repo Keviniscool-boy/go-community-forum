@@ -36,6 +36,7 @@ type Conversation struct {
 	InitiatorID    int64      `json:"initiator_id,string" db:"initiator_id"`
 	State          int32      `json:"state" db:"state"`
 	Version        int64      `json:"version" db:"version"`
+	DeclinedAt     *time.Time `json:"-" db:"declined_at"`
 	CreateTime     time.Time  `json:"create_time" db:"create_time"`
 	UpdateTime     time.Time  `json:"update_time" db:"update_time"`
 	// 展示层字段（非表列）：对方信息与我的未读数

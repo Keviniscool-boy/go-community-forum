@@ -48,6 +48,9 @@ const (
 	CodeAppealConflict    ResCode = 1033
 	CodeSeriesOrderConflict ResCode = 1034
 	CodeReviewPending     ResCode = 1035
+	CodeRevisionConflict  ResCode = 1038
+	CodeDMWaiting         ResCode = 1039
+	CodeDMCooldown        ResCode = 1040
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -87,6 +90,9 @@ var codeMsgMap = map[ResCode]string{
 	CodeAppealConflict:     "该内容已有进行中的申诉",
 	CodeSeriesOrderConflict: "目录版本冲突，请刷新后重试",
 	CodeReviewPending:      "该版本已有进行中的审阅",
+	CodeRevisionConflict:   "版本冲突，请刷新后重试",
+	CodeDMWaiting:          "首条消息已发送，等待对方接受请求",
+	CodeDMCooldown:         "对方已拒绝过请求，请 7 天后再试",
 }
 
 // 创建一个函数，传入code返回msg

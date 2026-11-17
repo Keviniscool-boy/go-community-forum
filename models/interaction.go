@@ -28,6 +28,7 @@ const (
 	NotifyTypeComment = 2 // 评论
 	NotifyTypeFollow  = 3 // 关注
 	NotifyTypeCollect = 4 // 收藏
+	NotifyTypeDM      = 5 // 私信（outbox worker 投递）
 )
 
 // Comment 评论模型

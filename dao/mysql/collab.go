@@ -6,6 +6,9 @@ import (
 
 	"bluebell/models"
 	"bluebell/pkg/snowflake"
+
+	"github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
 )
 
 // ---------- 系列 ----------
@@ -238,13 +241,16 @@ func GetArticleRevision(revisionID int64) (*models.ArticleRevision, error) {
 
 // ---------- 审阅 ----------
 
-// CreateReviewRequest 创建审阅请求（同文章同版本最多一个待处理）
+// CreateReviewRequest 创建审阅请求。
+// B06：通过 article_review_pending 的主键（article_id）实现"同文章同时最多一个待处理"，
+// 并发提交在标记表 INSERT 上冲突，事务回滚后两个请求都不落库（正确语义）。
 func CreateReviewRequest(r *models.ReviewRequest) error {
 	tx, err := db.Beginx()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	// 同文章同版本已有 pending 审阅 → 拒绝
 	var n int
 	if err = tx.Get(&n, "SELECT COUNT(review_id) FROM review_request WHERE article_id = ? AND revision_id = ? AND state = 0",
 		r.ArticleID, r.RevisionID); err != nil {
@@ -253,12 +259,28 @@ func CreateReviewRequest(r *models.ReviewRequest) error {
 	if n > 0 {
 		return ErrReviewPending
 	}
+	// pending 唯一标记：主键 article_id，并发插入冲突即拒绝
+	if _, err = tx.Exec(
+		"INSERT INTO article_review_pending (article_id, review_id, revision_id) VALUES (?, ?, ?)",
+		r.ArticleID, r.ReviewID, r.RevisionID); err != nil {
+		var mysqlErr *mysql.MySQLError
+		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+			return ErrReviewPending
+		}
+		return err
+	}
 	if _, err = tx.Exec(
 		"INSERT INTO review_request (review_id, article_id, revision_id, state, initiator_id) VALUES (?, ?, ?, 0, ?)",
 		r.ReviewID, r.ArticleID, r.RevisionID, r.InitiatorID); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// ClearReviewPending 删除 pending 标记（审阅决定后调用，与决定同事务）
+func ClearReviewPendingTx(tx *sqlx.Tx, articleID int64) error {
+	_, err := tx.Exec("DELETE FROM article_review_pending WHERE article_id = ?", articleID)
+	return err
 }
 
 var ErrReviewPending = errors.New("该版本已有进行中的审阅")
@@ -278,16 +300,31 @@ func GetReviewByID(reviewID int64) (*models.ReviewRequest, error) {
 
 var ErrReviewNotExist = errors.New("审阅不存在")
 
-// SetReviewDecision 审阅决定（版本绑定：批准的 revision 不匹配则拒绝）
-func SetReviewDecision(reviewID, revisionID int64, decision int32) (bool, error) {
-	result, err := db.Exec(
+// SetReviewDecisionAtomic 审阅决定（B04 原子化）：决定 + 清 pending 标记 + 文章协作状态同一事务。
+// 返回 ok=false 表示审阅不存在/已处理/版本不匹配。
+func SetReviewDecisionAtomic(reviewID, revisionID int64, decision int32, articleID int64, collabState int32) (bool, error) {
+	tx, err := db.Beginx()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(
 		"UPDATE review_request SET state = ?, reviewed_at = NOW() WHERE review_id = ? AND revision_id = ? AND state = 0",
 		decision, reviewID, revisionID)
 	if err != nil {
 		return false, err
 	}
-	n, _ := result.RowsAffected()
-	return n > 0, nil
+	if n, _ := result.RowsAffected(); n == 0 {
+		return false, nil
+	}
+	if err = ClearReviewPendingTx(tx, articleID); err != nil {
+		return false, err
+	}
+	if _, err = tx.Exec(
+		"UPDATE article SET collab_state = ? WHERE article_id = ?", collabState, articleID); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
 }
 
 // CreateReviewComment 审阅评论
@@ -315,3 +352,13 @@ func CreateColumnAudit(actorID, columnID int64, action, targetID, requestID stri
 	return err
 }
 
+// ClaimOutboxEvent CAS 认领（status 0→processing），多实例安全
+func ClaimOutboxEvent(id int64) (bool, error) {
+	result, err := db.Exec(
+		"UPDATE outbox SET status = 3 WHERE id = ? AND status = 0", id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := result.RowsAffected()
+	return n > 0, nil
+}

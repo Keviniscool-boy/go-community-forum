@@ -25,6 +25,10 @@ func dmError(c *gin.Context, err error) {
 		ResponseError(c, CodeInvalidParams)
 	case errors.Is(err, mysql.ErrPrivacyConflict):
 		ResponseError(c, CodePreferenceConflict)
+	case errors.Is(err, logic.ErrDMWaitingForAccept):
+		ResponseError(c, CodeDMWaiting)
+	case errors.Is(err, logic.ErrDMCooldown):
+		ResponseError(c, CodeDMCooldown)
 	default:
 		zap.L().Error("dm error", zap.Error(err))
 		ResponseError(c, CodeServerBusy)

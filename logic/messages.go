@@ -3,26 +3,30 @@ package logic
 // 私信会话与消息逻辑
 
 import (
+	"context"
 	"errors"
 	"strconv"
-
-	"context"
 	"time"
 
 	"bluebell/dao/mysql"
 	"bluebell/dao/redis"
 	"bluebell/models"
 	"bluebell/pkg/snowflake"
-
 )
 
 // 私信业务错误（对外统一不可联系提示，防枚举）
+// dmDeclineCooldown 拒绝后重新发起的冷却期（私信 PRD 默认 7 天）
+const dmDeclineCooldown = 7 * 24 * time.Hour
+
 var (
 	ErrCannotContact      = errors.New("无法向该用户发起沟通")
 	ErrDMRateLimited      = errors.New("发送过于频繁，请稍后再试")
 	ErrNotRequestReceiver = errors.New("仅会话接收方可以处理该请求")
 	ErrNotConversationPeer = errors.New("无权访问该会话")
 	ErrStateNotAllowed    = errors.New("会话状态不允许该操作")
+	ErrDMUnavailable      = errors.New("消息服务暂时不可用，请稍后重试")
+	ErrDMWaitingForAccept = errors.New("首条消息已发送，等待对方接受请求")
+	ErrDMCooldown         = errors.New("对方已拒绝过请求，请 7 天后再试")
 )
 
 // StartConversation 发起会话（首条消息）：权限/隐私/屏蔽/限流校验 + 幂等
@@ -36,9 +40,16 @@ func StartConversation(initiatorID int64, p *models.ParamStartConversation) (con
 	if err != nil || peer.Status == 0 {
 		return 0, nil, ErrCannotContact
 	}
-	// 屏蔽联动（双向）：任一方屏蔽对方即不可发
-	blocked1, _ := mysql.IsBlocked(recipientID, initiatorID)
-	blocked2, _ := mysql.IsBlocked(initiatorID, recipientID)
+	// 屏蔽联动（双向）：任一方屏蔽对方即不可发。
+	// B01 fail-closed：屏蔽状态查询出错时拒绝发送并返回可重试错误，不放行
+	blocked1, err := mysql.IsBlocked(recipientID, initiatorID)
+	if err != nil {
+		return 0, nil, ErrDMUnavailable
+	}
+	blocked2, err := mysql.IsBlocked(initiatorID, recipientID)
+	if err != nil {
+		return 0, nil, ErrDMUnavailable
+	}
 	if blocked1 || blocked2 {
 		return 0, nil, ErrCannotContact
 	}
@@ -56,7 +67,7 @@ func StartConversation(initiatorID int64, p *models.ParamStartConversation) (con
 			return 0, nil, err
 		}
 		if !following {
-			return 0, nil, ErrCannotContact
+		return 0, nil, ErrCannotContact
 		}
 	}
 	// 限流：每账号每小时 20 个新请求
@@ -101,8 +112,11 @@ func StartConversation(initiatorID int64, p *models.ParamStartConversation) (con
 			}
 			return conv.ConversationID, msg, nil
 		case models.ConvStateDeclined:
-			// 冷却策略 v1：允许重新发起（复用会话，重置为 pending）
-			ok, err := mysql.UpdateConversationState(conv.ConversationID, models.ConvStateDeclined, models.ConvStatePending, conv.Version)
+			// B02 冷却：拒绝后 7 天内不得重新发起（declined_at 为基准）
+			if conv.DeclinedAt != nil && time.Since(*conv.DeclinedAt) < dmDeclineCooldown {
+				return 0, nil, ErrDMCooldown
+			}
+			ok, err := mysql.DeclineResetToPending(conv.ConversationID, conv.Version)
 			if err != nil {
 				return 0, nil, err
 			}
@@ -111,18 +125,38 @@ func StartConversation(initiatorID int64, p *models.ParamStartConversation) (con
 			}
 			conv.State = models.ConvStatePending
 		case models.ConvStatePending:
-			// 已有待处理请求：允许发送一条首条消息（幂等键区分）
+			// B02：pending 只允许一条首信。
+			// 同 client_message_id 重试 → 幂等返回原消息；换了幂等键 → 明确提示等待接受
+			if existing, err := mysql.GetMessageByClientKey(conv.ConversationID, initiatorID, p.ClientMessageID); err == nil {
+				return conv.ConversationID, existing, nil
+			}
+			if n, err := mysql.CountMessagesInConversation(conv.ConversationID); err == nil && n > 0 {
+				return conv.ConversationID, nil, ErrDMWaitingForAccept
+			}
 		default:
 			return 0, nil, ErrStateNotAllowed
 		}
 	}
 
-	// 首条消息（pending 状态写入；限流：会话级每分钟 30 条）
-	msg, err := SendMessageToConversation(initiatorID, conv.ConversationID, &models.ParamSendMessage{
-		Body: p.Body, ClientMessageID: p.ClientMessageID,
-	})
+	// 首条消息（pending 状态直接写入：InsertMessage 自带 client 键幂等；B02 保证此时会话内无消息）
+	msg := &models.DirectMessage{
+		MessageID:       snowflake.GenerateID(),
+		ConversationID:  conv.ConversationID,
+		SenderID:        initiatorID,
+		ClientMessageID: p.ClientMessageID,
+		Body:            p.Body,
+	}
+	dup, err := mysql.InsertMessage(msg)
 	if err != nil {
 		return conv.ConversationID, nil, err
+	}
+	if dup {
+		// 并发窗口内同 client 键重复：按幂等键查回
+		existing, err := mysql.GetMessageByClientKey(conv.ConversationID, initiatorID, p.ClientMessageID)
+		if err != nil {
+			return conv.ConversationID, nil, err
+		}
+		return conv.ConversationID, existing, nil
 	}
 	return conv.ConversationID, msg, nil
 }
@@ -147,9 +181,15 @@ func SendMessageToConversation(senderID int64, conversationID int64, p *models.P
 		return nil, ErrStateNotAllowed
 	}
 	peer := mysql.PeerIDOf(conv, senderID)
-	// 屏蔽联动：任一方屏蔽即阻止
-	b1, _ := mysql.IsBlocked(peer, senderID)
-	b2, _ := mysql.IsBlocked(senderID, peer)
+	// 屏蔽联动：任一方屏蔽即阻止。B01 fail-closed：查询出错拒绝发送并返回可重试错误
+	b1, err := mysql.IsBlocked(peer, senderID)
+	if err != nil {
+		return nil, ErrDMUnavailable
+	}
+	b2, err := mysql.IsBlocked(senderID, peer)
+	if err != nil {
+		return nil, ErrDMUnavailable
+	}
 	if b1 || b2 {
 		return nil, ErrCannotContact
 	}
@@ -216,7 +256,7 @@ func DeclineConversation(userID, conversationID int64) error {
 		return err
 	}
 	if conv.State == models.ConvStateDeclined {
-		return nil
+		return nil // 幂等
 	}
 	if conv.State != models.ConvStatePending {
 		return ErrStateNotAllowed
@@ -224,7 +264,8 @@ func DeclineConversation(userID, conversationID int64) error {
 	if conv.InitiatorID == userID {
 		return ErrNotRequestReceiver
 	}
-	ok, err := mysql.UpdateConversationState(conversationID, models.ConvStatePending, models.ConvStateDeclined, conv.Version)
+	// CAS：记录 declined_at 作为 7 天冷却基准
+	ok, err := mysql.DeclineConversationCAS(conversationID, conv.Version)
 	if err != nil {
 		return err
 	}

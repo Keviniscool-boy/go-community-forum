@@ -15,6 +15,7 @@ import (
 	"bluebell/dao/mysql"
 	"bluebell/dao/redis"
 	"bluebell/logger"
+	"bluebell/logic"
 	"bluebell/pkg/mail"
 	"bluebell/pkg/search"
 	"bluebell/pkg/snowflake"
@@ -129,6 +130,12 @@ func main() {
 			}
 		}
 	}
+
+	// 6.1 后台 workers：outbox 投递 + 保留期清理（B07）
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
+	go logic.StartOutboxWorker(workerCtx, 10*time.Second)
+	go logic.StartRetentionWorker(workerCtx, time.Hour)
 
 	// 7.注册路由
 	r := routes.Setup()

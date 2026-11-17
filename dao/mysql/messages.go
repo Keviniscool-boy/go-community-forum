@@ -57,13 +57,15 @@ func UpsertPrivacySettings(userID int64, policy string, receipts bool, expectVer
 	} else if err != nil {
 		return 0, err
 	} else {
-		if cur != expectVersion {
-			return 0, ErrPrivacyConflict
-		}
-		if _, err = tx.Exec(
-			"UPDATE message_privacy_setting SET incoming_policy = ?, read_receipts_enabled = ?, version = version + 1 WHERE user_id = ?",
-			policy, receipts, userID); err != nil {
+		// B05 同款 CAS 条件更新：并发时受影响行 0 → 版本冲突
+		result, err := tx.Exec(
+			"UPDATE message_privacy_setting SET incoming_policy = ?, read_receipts_enabled = ?, version = version + 1 WHERE user_id = ? AND version = ?",
+			policy, receipts, userID, expectVersion)
+		if err != nil {
 			return 0, err
+		}
+		if n, _ := result.RowsAffected(); n == 0 {
+			return 0, ErrPrivacyConflict
 		}
 	}
 	if err = tx.Get(&newVersion, "SELECT version FROM message_privacy_setting WHERE user_id = ?", userID); err != nil {
@@ -75,7 +77,7 @@ func UpsertPrivacySettings(userID int64, policy string, receipts bool, expectVer
 // GetConversation 查询会话
 func GetConversation(conversationID int64) (*models.Conversation, error) {
 	c := new(models.Conversation)
-	err := db.Get(c, "SELECT conversation_id, user_low_id, user_high_id, initiator_id, state, version, create_time, update_time FROM conversation WHERE conversation_id = ?", conversationID)
+	err := db.Get(c, "SELECT conversation_id, user_low_id, user_high_id, initiator_id, state, version, declined_at, create_time, update_time FROM conversation WHERE conversation_id = ?", conversationID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrConversationNotExist
@@ -92,7 +94,7 @@ func GetConversationByPair(userA, userB int64) (*models.Conversation, error) {
 		low, high = high, low
 	}
 	c := new(models.Conversation)
-	err := db.Get(c, "SELECT conversation_id, user_low_id, user_high_id, initiator_id, state, version, create_time, update_time FROM conversation WHERE user_low_id = ? AND user_high_id = ?", low, high)
+	err := db.Get(c, "SELECT conversation_id, user_low_id, user_high_id, initiator_id, state, version, declined_at, create_time, update_time FROM conversation WHERE user_low_id = ? AND user_high_id = ?", low, high)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrConversationNotExist
@@ -128,6 +130,37 @@ func UpdateConversationState(conversationID int64, fromState, toState int32, exp
 	result, err := db.Exec(
 		"UPDATE conversation SET state = ?, version = version + 1 WHERE conversation_id = ? AND state = ? AND version = ?",
 		toState, conversationID, fromState, expectVersion)
+	if err != nil {
+		return false, err
+	}
+	n, _ := result.RowsAffected()
+	return n > 0, nil
+}
+
+// DeclineResetToPending 拒绝会话重置为 pending（冷却通过后），并清空 declined_at
+func DeclineResetToPending(conversationID int64, expectVersion int64) (bool, error) {
+	result, err := db.Exec(
+		"UPDATE conversation SET state = 0, declined_at = NULL, version = version + 1 WHERE conversation_id = ? AND state = 2 AND version = ?",
+		conversationID, expectVersion)
+	if err != nil {
+		return false, err
+	}
+	n, _ := result.RowsAffected()
+	return n > 0, nil
+}
+
+// CountMessagesInConversation 会话内消息总数（B02 首信唯一判定）
+func CountMessagesInConversation(conversationID int64) (int64, error) {
+	var n int64
+	err := db.Get(&n, "SELECT COUNT(*) FROM direct_message WHERE conversation_id = ?", conversationID)
+	return n, err
+}
+
+// DeclineConversationCAS 接收方拒绝：状态 CAS 迁移并记录 declined_at（冷却基准）
+func DeclineConversationCAS(conversationID int64, expectVersion int64) (bool, error) {
+	result, err := db.Exec(
+		"UPDATE conversation SET state = 2, declined_at = NOW(), version = version + 1 WHERE conversation_id = ? AND state = 0 AND version = ?",
+		conversationID, expectVersion)
 	if err != nil {
 		return false, err
 	}
