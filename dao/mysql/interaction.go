@@ -436,27 +436,50 @@ func txCreateNotification(tx *sqlx.Tx, userID, actorID int64, notifyType int32, 
 	return err
 }
 
-// ListNotifications 按 cursor 分页查询用户通知
-func ListNotifications(userID int64, cursorTime sql.NullTime, cursorID int64, limit int) (ns []*models.Notification, err error) {
-	ns = make([]*models.Notification, 0)
+// ListNotifications 按 cursor 分页查询用户通知（typeFilter 空串=全部）
+func ListNotifications(userID int64, cursorTime sql.NullTime, cursorID int64, limit int, typeFilter string) (ns []*models.Notification, err error) {
+	ns = make([]*models.Notification, 0, limit)
 	q := limit + 1
-	var query string
-	var args []interface{}
-	if cursorID == 0 {
-		query = `SELECT notification_id, user_id, actor_id, type, target_type, target_id, is_read, create_time
-			 FROM notification WHERE user_id = ?
-			 ORDER BY create_time DESC, notification_id DESC LIMIT ?`
-		args = []interface{}{userID, q}
-	} else {
-		query = `SELECT notification_id, user_id, actor_id, type, target_type, target_id, is_read, create_time
-			 FROM notification WHERE user_id = ?
-			 AND (create_time < ? OR (create_time = ? AND notification_id < ?))
-			 ORDER BY create_time DESC, notification_id DESC LIMIT ?`
-		args = []interface{}{userID, cursorTime.Time, cursorTime.Time, cursorID, q}
+	where := "WHERE user_id = ?"
+	args := []interface{}{userID}
+	if typeFilter != "" {
+		where += " AND type = ?"
+		args = append(args, notificationTypeCode(typeFilter))
 	}
+	if cursorID > 0 {
+		where += " AND (create_time < ? OR (create_time = ? AND notification_id < ?))"
+		args = append(args, cursorTime.Time, cursorTime.Time, cursorID)
+	}
+	query := `SELECT notification_id, user_id, actor_id, type, target_type, target_id, is_read, create_time
+		 FROM notification ` + where + `
+		 ORDER BY create_time DESC, notification_id DESC LIMIT ?`
+	args = append(args, q)
 	err = db.Select(&ns, query, args...)
 	return
 }
+
+// NotificationTypeFilter 字符串过滤类型转编码；空串返回 0 表示不过滤
+func NotificationTypeFilter(s string) int32 {
+	switch s {
+	case "like":
+		return models.NotifyTypeLike
+	case "comment":
+		return models.NotifyTypeComment
+	case "follow":
+		return models.NotifyTypeFollow
+	case "collect":
+		return models.NotifyTypeCollect
+	case "dm":
+		return models.NotifyTypeDM
+	}
+	return 0
+}
+
+// notificationTypeCode 同 NotificationTypeFilter（dao 内使用）
+func notificationTypeCode(s string) int32 {
+	return NotificationTypeFilter(s)
+}
+
 
 // CountUnreadNotifications 查询未读通知数
 func CountUnreadNotifications(userID int64) (int, error) {

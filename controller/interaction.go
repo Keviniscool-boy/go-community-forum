@@ -372,7 +372,7 @@ func ListNotificationsHandler(c *gin.Context) {
 		ResponseError(c, CodeNeedLogin)
 		return
 	}
-	data, err := logic.ListNotifications(userID, c.Query("cursor"), atoiDefault(c.Query("limit"), 20))
+	data, err := logic.ListNotifications(userID, c.Query("cursor"), atoiDefault(c.Query("limit"), 20), c.Query("type"))
 	if err != nil {
 		zap.L().Error("logic.ListNotifications failed", zap.Error(err))
 		ResponseError(c, CodeServerBusy)

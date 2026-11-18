@@ -10,8 +10,8 @@ import (
 
 // 通知相关
 
-// ListNotifications 用户通知列表（cursor 分页）
-func ListNotifications(userID int64, cursor string, limit int) (*models.PageResult[*models.ApiNotificationDetail], error) {
+// ListNotifications 用户通知列表（cursor 分页；typeFilter 非空时按类型过滤）
+func ListNotifications(userID int64, cursor string, limit int, typeFilter string) (*models.PageResult[*models.ApiNotificationDetail], error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -28,7 +28,7 @@ func ListNotifications(userID int64, cursor string, limit int) (*models.PageResu
 		cursorTime.Time = c.Time
 		cursorID = c.ID
 	}
-	ns, err := mysql.ListNotifications(userID, cursorTime, cursorID, limit)
+	ns, err := mysql.ListNotifications(userID, cursorTime, cursorID, limit, typeFilter)
 	if err != nil {
 		return nil, err
 	}
