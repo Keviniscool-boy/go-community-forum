@@ -5,7 +5,6 @@ package logic
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -41,7 +40,6 @@ func StartConversation(initiatorID int64, p *models.ParamStartConversation) (con
 	if err != nil || peer.Status == 0 {
 		return 0, nil, ErrCannotContact
 	}
-	fmt.Println("DEBUG start conv: initiator=", initiatorID, "recipient=", recipientID)
 	// 屏蔽联动（双向）：任一方屏蔽对方即不可发。
 	// B01 fail-closed：屏蔽状态查询出错时拒绝发送并返回可重试错误，不放行
 	blocked1, err := mysql.IsBlocked(recipientID, initiatorID)
