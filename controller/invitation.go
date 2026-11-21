@@ -44,7 +44,7 @@ func respondInviteError(c *gin.Context, err error) {
 // @Param sort query string false "latest（默认）| oldest_unanswered"
 // @Param cursor query string false "分页游标"
 // @Param limit query int false "每页数量（默认 20 最大 50）"
-// @Success 200 {object} controller.Response{data=models.PageResult[*models.Question]}
+// @Success 200 {object} controller.Response{data=models.PageResult[*models.ApiQuestionDetail]}
 // @Router /questions/unanswered [get]
 func ListUnansweredQuestionsHandler(c *gin.Context) {
 	topicID, _ := strconv.ParseInt(c.Query("topic_id"), 10, 64)

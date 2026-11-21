@@ -65,7 +65,7 @@ func SendAnswerInvitations(inviterID, questionID int64, p *models.ParamSendAnswe
 }
 
 // ListUnansweredQuestions 待回答问题列表（公开；sort=latest|oldest_unanswered；keyset 游标）
-func ListUnansweredQuestions(topicID int64, sort, cursor string, limit int) (*models.PageResult[*models.Question], error) {
+func ListUnansweredQuestions(topicID int64, sort, cursor string, limit int) (*models.PageResult[*models.ApiQuestionDetail], error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -109,7 +109,7 @@ func ListUnansweredQuestions(topicID int64, sort, cursor string, limit int) (*mo
 		last := items[len(items)-1]
 		next = base64Encode(marshalJSONMust(&unansweredCursor{Time: last.CreateTime, ID: last.ID}))
 	}
-	return &models.PageResult[*models.Question]{
+	return &models.PageResult[*models.ApiQuestionDetail]{
 		Items:      items,
 		NextCursor: next,
 		HasMore:    hasMore,

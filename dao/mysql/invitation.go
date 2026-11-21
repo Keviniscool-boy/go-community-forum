@@ -57,8 +57,8 @@ type UnansweredPageParams struct {
 
 // ListUnansweredQuestions 待回答问题：公开可见 + resolution=open + 无公开审核通过回答
 // （PRD §3：是否有被隐藏/删除回答不影响资格 → 用 NOT EXISTS 公开回答判定，不依赖派生计数）
-func ListUnansweredQuestions(p *UnansweredPageParams) (questions []*models.Question, err error) {
-	questions = make([]*models.Question, 0)
+func ListUnansweredQuestions(p *UnansweredPageParams) (questions []*models.ApiQuestionDetail, err error) {
+	questions = make([]*models.ApiQuestionDetail, 0)
 	limit := p.Limit
 	if limit <= 0 || limit > 50 {
 		limit = 20
@@ -89,7 +89,8 @@ func ListUnansweredQuestions(p *UnansweredPageParams) (questions []*models.Quest
 
 	query := `SELECT q.question_id, q.title, q.description, q.author_id, q.answer_count,
 		q.comment_count, q.follower_count, q.view_count, q.status, q.resolution_status,
-		COALESCE(q.accepted_answer_id, 0) AS accepted_answer_id, q.create_time, q.update_time
+		COALESCE(q.accepted_answer_id, 0) AS accepted_answer_id, q.create_time, q.update_time,
+		u.username AS author_name
 		FROM question q` + topicJoin + `
 		JOIN user u ON u.user_id = q.author_id AND u.status = 1
 		WHERE ` + invitationQuestionVisible + ` AND q.resolution_status = 0

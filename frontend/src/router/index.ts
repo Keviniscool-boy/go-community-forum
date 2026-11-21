@@ -11,6 +11,7 @@ const router = createRouter({
         { path: '', name: 'home', component: () => import('@/views/HomeView.vue'), meta: { title: '首页' } },
         { path: 'post/:id', name: 'post-detail', component: () => import('@/views/PostDetailView.vue'), meta: { title: '帖子详情' } },
         { path: 'questions/ask', name: 'ask-question', component: () => import('@/views/AskQuestionView.vue'), meta: { title: '提问', requiresAuth: true } },
+        { path: 'questions/unanswered', name: 'unanswered', component: () => import('@/views/UnansweredQuestionsView.vue'), meta: { title: '等你来答' } },
         { path: 'questions/:id', name: 'question-detail', component: () => import('@/views/QuestionDetailView.vue'), meta: { title: '问题详情' } },
         { path: 'ask', redirect: { name: 'ask-question' } },
         { path: 'hot', name: 'hot', component: () => import('@/views/HomeView.vue'), meta: { title: '热榜' } },

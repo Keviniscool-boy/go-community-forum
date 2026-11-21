@@ -8,10 +8,33 @@ import {
   type FeedbackItem, type BlockedUser,
 } from '@/api/personalization'
 import { fetchTopics } from '@/api/notification'
+import { fetchAnswerInvitationPreference, setAnswerInvitationPreference } from '@/api/invitation'
+import { ApiError } from '@/api/http'
 import LoadingState from '@/components/LoadingState.vue'
 
 const loading = ref(true)
 const personalization = ref(true)
+const invitePref = ref(true)
+
+onMounted(() => {
+  fetchAnswerInvitationPreference()
+    .then((res) => {
+      invitePref.value = res?.enabled ?? true
+    })
+    .catch(() => {
+      // 读取失败保持默认
+    })
+})
+
+async function toggleInvitePref() {
+  try {
+    await setAnswerInvitationPreference(invitePref.value)
+    ElMessage.success(invitePref.value ? '已开启回答邀请' : '已关闭回答邀请（你不会出现在候选中）')
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+    invitePref.value = !invitePref.value
+  }
+}
 const prefVersion = ref(0)
 const myTopics = ref<string[]>([])
 const allTopics = ref<Array<{ topic_id: string; name: string }>>([])
@@ -86,6 +109,17 @@ onMounted(load)
           <p class="pref-desc">关闭后推荐仅基于公开热度与新鲜度，不使用你的浏览与点击历史；关注流不受影响。</p>
         </div>
         <el-switch v-model="personalization" @change="togglePersonalization" />
+      </div>
+    </div>
+
+    <div class="bb-card pref-card">
+      <h3>回答邀请</h3>
+      <div class="pref-row">
+        <div>
+          <p class="pref-title">接收回答邀请</p>
+          <p class="pref-desc">关闭后其他用户不能邀请你回答问题，你也不会出现在邀请候选列表中。</p>
+        </div>
+        <el-switch v-model="invitePref" @change="toggleInvitePref" />
       </div>
     </div>
 

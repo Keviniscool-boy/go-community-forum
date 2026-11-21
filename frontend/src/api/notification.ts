@@ -6,13 +6,14 @@ export interface NotificationDetail {
   id: string
   actor_id: string
   actor_name: string
-  type: number // 1 赞同 2 评论 3 关注 4 收藏
+  type: number // 1 赞同 2 评论 3 关注 4 收藏 6 采纳 8 新回答 9 邀请回答 10/11 邀请响应
   target_type: number
   target_id: string
   is_read: boolean
   create_time: string
   excerpt: string
   agg_count?: number // 聚合条数（>1 时显示"某某等 N 人"）
+  question_id?: string // 邀请类通知（type 9）跳转用
 }
 
 export function fetchNotifications(cursor = '', limit = 20) {
