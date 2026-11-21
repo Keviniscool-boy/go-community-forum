@@ -38,7 +38,7 @@ function targetLink(n: { type: number; target_type: number; target_id: string; a
 }
 
 const typeIcon = (t: number) =>
-  ({ 1: '👍', 2: '💬', 3: '➕', 4: '⭐' })[t] || '🔔'
+  ({ 1: '👍', 2: '💬', 3: '➕', 4: '⭐', 6: '✅', 7: '↩️' })[t] || '🔔'
 </script>
 
 <template>

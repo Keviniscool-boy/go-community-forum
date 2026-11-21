@@ -34,6 +34,7 @@ const router = createRouter({
         { path: 'series/:id', name: 'series-detail', component: () => import('@/views/SeriesView.vue'), meta: { title: '系列' } },
         { path: 'search', name: 'search', component: () => import('@/views/SearchView.vue'), meta: { title: '搜索' } },
         { path: 'drafts', name: 'drafts', component: () => import('@/views/DraftsView.vue'), meta: { title: '草稿箱', requiresAuth: true } },
+        { path: 'me/content', name: 'my-content', component: () => import('@/views/MyContentView.vue'), meta: { title: '我的内容', requiresAuth: true } },
         { path: 'bookmarks', name: 'bookmarks', component: () => import('@/views/BookmarksView.vue'), meta: { title: '收藏夹', requiresAuth: true } },
         { path: 'history', name: 'history', component: () => import('@/views/HistoryView.vue'), meta: { title: '浏览历史', requiresAuth: true } },
         { path: 'admin', name: 'admin', component: () => import('@/views/AdminView.vue'), meta: { title: '管理后台', requiresAuth: true } },

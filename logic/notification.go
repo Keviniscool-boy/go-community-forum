@@ -95,6 +95,10 @@ func notifyText(t int32) string {
 		return "关注了你"
 	case models.NotifyTypeCollect:
 		return "收藏了你的回答"
+	case models.NotifyTypeAccept:
+		return "采纳了你的回答"
+	case models.NotifyTypeUnaccept:
+		return "撤销了对你回答的采纳"
 	}
 	return "与你互动"
 }

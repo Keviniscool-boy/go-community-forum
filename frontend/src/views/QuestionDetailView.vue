@@ -4,7 +4,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { View as ViewIcon, CaretTop, Star, ChatDotRound } from '@element-plus/icons-vue'
-import { fetchQuestionDetail, fetchAnswers, createAnswer, updateQuestion, deleteQuestion, updateAnswer, deleteAnswer, type QuestionDetail, type AnswerDetail } from '@/api/question'
+import { fetchQuestionDetail, fetchAnswers, createAnswer, updateQuestion, deleteQuestion, updateAnswer, deleteAnswer, acceptAnswer, unacceptAnswer, setQuestionStatus, type QuestionDetail, type AnswerDetail } from '@/api/question'
 import { voteAnswer, collectAnswer, uncollectAnswer, followQuestion, unfollowQuestion, fetchQuestionInteractions, fetchAnswerInteractions, fetchComments, createComment, type CommentDetail } from '@/api/interaction'
 import { followUser, unfollowUser } from '@/api/interaction'
 import { addBookmarkItem, listFolders, createFolder, type BookmarkFolder } from '@/api/productivity'
@@ -259,6 +259,92 @@ function switchOrder(o: 'hot' | 'latest') {
   loadAnswers(true)
 }
 
+// ---------- 解决闭环（采纳/撤销/关闭/重开） ----------
+
+// resolution_status: 0=open 1=solved 2=closed
+const isSolved = computed(() => question.value?.resolution_status === 1)
+const isClosed = computed(() => question.value?.resolution_status === 2)
+const acceptedAnswerId = computed(() => question.value?.accepted_answer_id || '')
+
+const acceptingId = ref('')
+
+// 采纳回答（仅提问者）
+async function onAccept(a: AnswerDetail) {
+  if (!auth.isLoggedIn) {
+    router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  try {
+    await ElMessageBox.confirm('采纳后问题将标记为已解决，确定采纳该回答？', '采纳回答', { type: 'success' })
+  } catch {
+    return
+  }
+  acceptingId.value = a.id
+  try {
+    await acceptAnswer(questionId, a.id)
+    ElMessage.success('已采纳该回答')
+    await load()
+    await loadAnswers(true)
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    acceptingId.value = ''
+  }
+}
+
+// 撤销采纳（仅提问者）
+async function onUnaccept(a: AnswerDetail) {
+  if (!auth.isLoggedIn) {
+    router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  try {
+    await ElMessageBox.confirm('撤销后问题将恢复为待解决，确定撤销？', '撤销采纳', { type: 'warning' })
+  } catch {
+    return
+  }
+  acceptingId.value = a.id
+  try {
+    await unacceptAnswer(questionId, a.id)
+    ElMessage.success('已撤销采纳')
+    await load()
+    await loadAnswers(true)
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    acceptingId.value = ''
+  }
+}
+
+// 关闭/重开问题（仅提问者）
+const statusSubmitting = ref(false)
+async function onToggleClosed() {
+  if (!auth.isLoggedIn) {
+    router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  const closing = !isClosed.value
+  try {
+    await ElMessageBox.confirm(
+      closing ? '关闭后将不再接受新回答，确定关闭？' : '重开后其他用户可以继续回答，确定重开？',
+      closing ? '关闭问题' : '重开问题',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  statusSubmitting.value = true
+  try {
+    await setQuestionStatus(questionId, closing ? 'closed' : 'open')
+    ElMessage.success(closing ? '问题已关闭' : '问题已重开')
+    await load()
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    statusSubmitting.value = false
+  }
+}
+
 // 投票（同一回答再次点击同一方向 = 取消）
 async function onVote(a: AnswerDetail, direction: 1 | -1) {
   if (!auth.isLoggedIn) {
@@ -421,6 +507,8 @@ onMounted(() => {
       <article class="bb-card q-card">
         <h1 class="q-title">{{ question.title }}</h1>
         <div class="q-meta">
+          <el-tag v-if="isSolved" type="success" effect="light" size="small" class="q-status-tag">已解决</el-tag>
+          <el-tag v-else-if="isClosed" type="info" effect="light" size="small" class="q-status-tag">已关闭</el-tag>
           <span class="q-author">{{ question.author_name }}</span>
           <span>发布于 {{ question.create_time?.slice(0, 10) }}</span>
           <span class="q-views"><el-icon><ViewIcon /></el-icon>{{ question.view_count }} 次浏览</span>
@@ -438,6 +526,15 @@ onMounted(() => {
           </el-button>
           <template v-if="isQuestionAuthor">
             <el-button size="small" plain @click="openEditQuestion">编辑</el-button>
+            <el-button
+              v-if="!isSolved"
+              size="small"
+              plain
+              :loading="statusSubmitting"
+              @click="onToggleClosed"
+            >
+              {{ isClosed ? '重开问题' : '关闭问题' }}
+            </el-button>
             <el-button size="small" plain type="danger" @click="onDeleteQuestion">删除</el-button>
           </template>
           <el-button size="small" plain :loading="bookmarkLoading" @click="onBookmark">收藏</el-button>
@@ -500,7 +597,7 @@ onMounted(() => {
         <EmptyState text="还没有回答，写下你的答案" />
       </div>
       <template v-else>
-        <article v-for="a in answers" :key="a.id" class="bb-card answer-card">
+        <article v-for="a in answers" :key="a.id" class="bb-card answer-card" :class="{ 'answer-accepted': a.accepted }">
           <div class="a-vote">
             <button class="vote-btn" :class="{ active: voteMap[a.id] === 1 }" @click="onVote(a, 1)">
               <el-icon><CaretTop /></el-icon>
@@ -509,6 +606,7 @@ onMounted(() => {
           </div>
           <div class="a-body">
             <div class="a-author-row">
+              <el-tag v-if="a.accepted" type="success" size="small" effect="light" class="accepted-tag">✓ 已采纳</el-tag>
               <router-link class="a-author" :to="`/users/${a.author_id}`">{{ a.author_name }}</router-link>
             </div>
             <div class="a-content">{{ a.content }}</div>
@@ -517,6 +615,25 @@ onMounted(() => {
               <button class="footer-btn" :class="{ active: collectMap[a.id] }" @click="onCollect(a)">
                 <el-icon><Star /></el-icon>{{ collectMap[a.id] ? '已收藏' : '收藏' }} · {{ a.collect_count }}
               </button>
+              <!-- 仅提问者可采纳/撤销；closed 状态不显示采纳 -->
+              <template v-if="isQuestionAuthor && !isClosed">
+                <button
+                  v-if="a.accepted"
+                  class="footer-btn accepted-btn"
+                  :disabled="acceptingId === a.id"
+                  @click="onUnaccept(a)"
+                >
+                  取消采纳
+                </button>
+                <button
+                  v-else
+                  class="footer-btn"
+                  :disabled="acceptingId === a.id || !!acceptedAnswerId"
+                  @click="onAccept(a)"
+                >
+                  采纳
+                </button>
+              </template>
               <template v-if="auth.user?.user_id === a.author_id">
                 <button class="footer-btn" @click="openEditAnswer(a)">编辑</button>
                 <button class="footer-btn danger" @click="onDeleteAnswer(a)">删除</button>
@@ -564,8 +681,11 @@ onMounted(() => {
           </template>
         </el-dialog>
 
-      <!-- 回答编辑器 -->
-      <div class="bb-card answer-editor">
+      <!-- 回答编辑器（已关闭的问题不接受新回答） -->
+      <div v-if="isClosed" class="bb-card answer-editor answer-editor-closed">
+        该问题已关闭，不再接受新回答。
+      </div>
+      <div v-else class="bb-card answer-editor">
         <h3>写下你的回答</h3>
         <el-input
           v-model="answerContent"
@@ -605,6 +725,10 @@ onMounted(() => {
   margin: 12px 0;
   color: var(--bb-text-tertiary);
   font-size: 13px;
+}
+
+.q-status-tag {
+  flex-shrink: 0;
 }
 
 .q-views {
@@ -668,6 +792,26 @@ onMounted(() => {
   gap: 16px;
   padding: 16px 20px;
   margin-bottom: 12px;
+
+  &.answer-accepted {
+    border-left: 3px solid var(--bb-primary, #409eff);
+    background: color-mix(in srgb, var(--bb-primary, #409eff) 4%, transparent);
+  }
+}
+
+.accepted-tag {
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.accepted-btn {
+  color: var(--bb-primary, #409eff);
+}
+
+.answer-editor-closed {
+  color: var(--bb-text-tertiary);
+  text-align: center;
+  padding: 20px;
 }
 
 .a-vote {
