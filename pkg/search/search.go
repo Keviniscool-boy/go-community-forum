@@ -22,13 +22,13 @@ type Document struct {
 
 // Query 查询参数
 type Query struct {
-	Keyword   string // 1-100 字符
-	Scope     string // all | question | answer | article | column | user | topic
-	Type      string // 内容类型过滤（scope 为空时生效）
-	Sort      string // relevance | latest
-	CursorID  int64  // 游标（结果内最大/最小 id，实现自定义）
-	Limit     int
-	ViewerID  int64 // 0 = 游客
+	Keyword  string // 1-100 字符
+	Scope    string // all | question | answer | article | column | user | topic
+	Type     string // 内容类型过滤（scope 为空时生效）
+	Sort     string // relevance | latest
+	Cursor   string // 不透明游标（实现自定义；上一页 NextCursor 原样传回）
+	Limit    int
+	ViewerID int64 // 0 = 游客
 }
 
 // ResultItem 结果条目

@@ -214,36 +214,56 @@ func UpdatePasswordByEmail(email, plainPassword string) (bool, error) {
 	return n > 0, nil
 }
 
-// CountUserQuestions 用户提问数
+// CountUserQuestions 用户公开提问数（统一可见条件：审核通过/公开/未删除/作者有效，
+// 与 ListUserQuestions 及主页列表口径一致，防止统计与列表不一致或泄露被隔离内容）
 func CountUserQuestions(userID int64) (int, error) {
 	var n int
-	err := db.Get(&n, "SELECT COUNT(question_id) FROM question WHERE author_id = ? AND status = 1", userID)
+	err := db.Get(&n, `SELECT COUNT(q.question_id) FROM question q
+		JOIN user u ON u.user_id = q.author_id AND u.status = 1
+		WHERE q.author_id = ? AND q.status = 1 AND q.moderation_status = 1
+		AND q.visibility = 1 AND q.deleted_at IS NULL`, userID)
 	return n, err
 }
 
-// CountUserAnswers 用户回答数
+// CountUserAnswers 用户公开回答数（含所属问题可见性，防止从主页旁路读到隐藏问题的回答）
 func CountUserAnswers(userID int64) (int, error) {
 	var n int
-	err := db.Get(&n, "SELECT COUNT(answer_id) FROM answer WHERE author_id = ? AND status = 1", userID)
+	err := db.Get(&n, `SELECT COUNT(a.answer_id) FROM answer a
+		JOIN question qu ON qu.question_id = a.question_id AND qu.status = 1
+			AND qu.moderation_status = 1 AND qu.visibility = 1 AND qu.deleted_at IS NULL
+		JOIN user u ON u.user_id = a.author_id AND u.status = 1
+		WHERE a.author_id = ? AND a.status = 1 AND a.moderation_status = 1
+		AND a.visibility = 1 AND a.deleted_at IS NULL`, userID)
 	return n, err
 }
 
 // ListUserQuestions 用户的提问列表（最新优先）
 func ListUserQuestions(userID int64, limit int) (questions []*models.Question, err error) {
 	questions = make([]*models.Question, 0, limit)
-	err = db.Select(&questions, `SELECT question_id, title, description, author_id, answer_count,
-		comment_count, follower_count, view_count, status, create_time
-		FROM question WHERE author_id = ? AND status = 1 ORDER BY create_time DESC LIMIT ?`, userID, limit)
+	// 统一公开可见条件：主页是公开入口，隔离/隐藏/已删除问题不得出现
+	err = db.Select(&questions, `SELECT q.question_id, q.title, q.description, q.author_id, q.answer_count,
+		q.comment_count, q.follower_count, q.view_count, q.status, q.resolution_status,
+		COALESCE(q.accepted_answer_id, 0) AS accepted_answer_id, q.create_time, q.update_time
+		FROM question q JOIN user u ON u.user_id = q.author_id AND u.status = 1
+		WHERE q.author_id = ? AND q.status = 1 AND q.moderation_status = 1
+		AND q.visibility = 1 AND q.deleted_at IS NULL
+		ORDER BY q.create_time DESC, q.question_id DESC LIMIT ?`, userID, limit)
 	return
 }
 
 // ListUserAnswers 用户的回答列表（带所属问题标题）
 func ListUserAnswers(userID int64, limit int) (answers []*models.ApiAnswerDetail, err error) {
 	answers = make([]*models.ApiAnswerDetail, 0, limit)
+	// 统一公开可见条件：回答本身公开 + 所属问题公开 + 作者有效
 	err = db.Select(&answers, `SELECT a.answer_id, a.question_id, a.author_id, a.content, a.vote_count,
 		a.comment_count, a.collect_count, a.status, a.create_time, qu.title AS question_title
-		FROM answer a JOIN question qu ON qu.question_id = a.question_id
-		WHERE a.author_id = ? AND a.status = 1 ORDER BY a.create_time DESC LIMIT ?`, userID, limit)
+		FROM answer a
+		JOIN question qu ON qu.question_id = a.question_id AND qu.status = 1
+			AND qu.moderation_status = 1 AND qu.visibility = 1 AND qu.deleted_at IS NULL
+		JOIN user u ON u.user_id = a.author_id AND u.status = 1
+		WHERE a.author_id = ? AND a.status = 1 AND a.moderation_status = 1
+		AND a.visibility = 1 AND a.deleted_at IS NULL
+		ORDER BY a.create_time DESC, a.answer_id DESC LIMIT ?`, userID, limit)
 	return
 }
 

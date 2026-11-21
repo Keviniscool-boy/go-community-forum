@@ -120,6 +120,7 @@ const (
 	MeContentQuestion = "question"
 	MeContentAnswer   = "answer"
 	MeContentArticle  = "article"
+	MeContentColumn   = "column"
 
 	MeContentPublished = "published" // 公开（审核通过）
 	MeContentPending   = "pending"   // 审核中
@@ -141,7 +142,7 @@ type ApiMyContentItem struct {
 
 // ParamMyContent GET /me/content 查询参数
 type ParamMyContent struct {
-	Type   string `form:"type" json:"type" binding:"required,oneof=question answer article"`
+	Type   string `form:"type" json:"type" binding:"required,oneof=question answer article column"`
 	Status string `form:"status" json:"status" binding:"omitempty,oneof=published pending hidden deleted"`
 	Cursor string `form:"cursor" json:"cursor"`
 	Limit  int    `form:"limit" json:"limit"`

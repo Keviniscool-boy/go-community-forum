@@ -12,8 +12,8 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
-const contentType = ref<'question' | 'answer' | 'article'>(
-  (route.query.type as 'question' | 'answer' | 'article') || 'question',
+const contentType = ref<'question' | 'answer' | 'article' | 'column'>(
+  (route.query.type as 'question' | 'answer' | 'article' | 'column') || 'question',
 )
 const statusFilter = ref<'published' | 'pending' | 'hidden' | 'deleted' | ''>(
   (route.query.status as 'published' | 'pending' | 'hidden' | 'deleted') || '',
@@ -29,6 +29,7 @@ const typeTabs = [
   { key: 'question', label: '问题' },
   { key: 'answer', label: '回答' },
   { key: 'article', label: '文章' },
+  { key: 'column', label: '专栏' },
 ] as const
 
 const statusOptions = [
@@ -62,12 +63,13 @@ function stateTagType(it: MyContentItem): 'success' | 'info' | 'warning' | 'dang
 function itemLink(it: MyContentItem): string {
   if (it.content_type === 'question') return `/questions/${it.content_id}`
   if (it.content_type === 'article') return `/articles/${it.content_id}`
+  if (it.content_type === 'column') return `/columns/${it.content_id}`
   // 回答跳到所属问题（列表接口已带所属问题标题，但链接只有回答 id；
   // 后端 /me/content 未返回 question_id，回答条目跳转到创作者个人主页对应的回答上下文）
   return ''
 }
 
-function switchType(t: 'question' | 'answer' | 'article') {
+function switchType(t: 'question' | 'answer' | 'article' | 'column') {
   if (contentType.value === t) return
   contentType.value = t
   syncUrl()

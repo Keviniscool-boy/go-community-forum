@@ -72,6 +72,14 @@ func ListUserContent(userID int64, contentType, status string, cursorTime time.T
 			query += " AND (create_time < ? OR (create_time = ? AND article_id < ?))"
 			args = append(args, cursorTime, cursorTime, cursorID)
 		}
+	case models.MeContentColumn:
+		query = `SELECT column_id AS content_id, name AS title, LEFT(description, 100) AS excerpt,
+			 status, moderation_status, 0 AS resolution_status, create_time
+			 FROM column_info WHERE owner_id = ?` + myContentStatusFilter("", status)
+		if cursorID > 0 {
+			query += " AND (create_time < ? OR (create_time = ? AND column_id < ?))"
+			args = append(args, cursorTime, cursorTime, cursorID)
+		}
 	default:
 		// controller binding 校验枚举；此处兜底防御非法类型
 		return nil, ErrInvalidParams

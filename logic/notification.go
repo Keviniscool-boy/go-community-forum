@@ -129,10 +129,14 @@ type ApiUserProfile struct {
 }
 
 // GetUserProfile 用户主页：基本信息 + 内容统计 + 关注关系
+// 被禁用账号统一按不存在处理（防枚举，与内容可见策略一致）
 func GetUserProfile(targetID int64, viewerID int64) (*ApiUserProfile, error) {
 	user, err := mysql.GetUserDetailByID(targetID)
 	if err != nil {
 		return nil, err
+	}
+	if user.Status != 1 {
+		return nil, mysql.ErrUserNotExist
 	}
 	questionCount, err := mysql.CountUserQuestions(targetID)
 	if err != nil {

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -53,15 +52,11 @@ func SearchHandler(c *gin.Context) {
 	if limit > 50 {
 		limit = 50
 	}
-	cursorID := int64(0)
-	if v, err := strconv.ParseInt(c.Query("cursor"), 10, 64); err == nil {
-		cursorID = v
-	}
 	res, err := searchIndex.Search(c.Request.Context(), search.Query{
 		Keyword:  keyword,
 		Scope:    c.DefaultQuery("scope", "all"),
 		Sort:     c.DefaultQuery("sort", "relevance"),
-		CursorID: cursorID,
+		Cursor:   c.Query("cursor"),
 		Limit:    limit,
 		ViewerID: tryGetUserID(c),
 	})

@@ -116,7 +116,7 @@ export function setQuestionStatus(id: string, status: 'open' | 'closed') {
 
 // 我的内容管理条目（跨问题/回答/文章统一形状）
 export interface MyContentItem {
-  content_type: 'question' | 'answer' | 'article'
+  content_type: 'question' | 'answer' | 'article' | 'column'
   content_id: string
   title: string
   excerpt: string
@@ -128,7 +128,7 @@ export interface MyContentItem {
 
 // 我的内容管理列表（type+status 过滤，cursor 分页）
 export function fetchMyContent(params: {
-  type: 'question' | 'answer' | 'article'
+  type: 'question' | 'answer' | 'article' | 'column'
   status?: 'published' | 'pending' | 'hidden' | 'deleted'
   cursor?: string
   limit?: number

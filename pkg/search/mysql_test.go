@@ -120,10 +120,94 @@ func TestSearchColumnScopeAndSolvedFlag(t *testing.T) {
 	}
 }
 
-
 func mustExecSearch(t *testing.T, d *sqlx.DB, query string, args ...interface{}) {
 	t.Helper()
 	if _, err := d.Exec(query, args...); err != nil {
 		t.Fatalf("exec %q: %v", query, err)
+	}
+}
+
+func TestSearchKeysetPaginationNoDupNoMiss(t *testing.T) {
+	if searchDSN == "" {
+		t.Skip("BB_TEST_MYSQL_DSN not set, skip search integration test")
+	}
+	if err := snowflake.Init("2026-07-24 00:00:00", 1); err != nil {
+		t.Fatalf("init snowflake: %v", err)
+	}
+	root, err := sqlx.Connect("mysql", searchDSN)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() { _ = root.Close() })
+	fullName := "bb_search_page_" + t.Name()
+	mustExecSearch(t, root, "DROP DATABASE IF EXISTS "+fullName)
+	mustExecSearch(t, root, "CREATE DATABASE "+fullName+" DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci")
+	t.Cleanup(func() { mustExecSearch(t, root, "DROP DATABASE IF EXISTS "+fullName) })
+
+	temp, err := sqlx.Connect("mysql", searchDSN+fullName+"?charset=utf8mb4&parseTime=True&loc=UTC")
+	if err != nil {
+		t.Fatalf("connect temp: %v", err)
+	}
+	t.Cleanup(func() { _ = temp.Close() })
+	t.Cleanup(func() { mustExecSearch(t, root, "DROP DATABASE IF EXISTS "+fullName) })
+	mysql.SetGlobalDB(temp)
+	if err = mysql.RunMigrations(); err != nil {
+		t.Fatalf("migrations: %v", err)
+	}
+
+	mustExecSearch(t, temp,
+		"INSERT INTO user (user_id, username, email, role, password) VALUES (7101, 'pager', 'pg@t', 'user', 'x')")
+	// 12 个问题 + 3 个用户名命中的用户，limit=10 翻两页应无重复无遗漏
+	const nQuestions = 12
+	ids := make([]int64, 0, nQuestions)
+	for i := 0; i < nQuestions; i++ {
+		id := snowflake.GenerateID()
+		ids = append(ids, id)
+		mustExecSearch(t, temp,
+			"INSERT INTO question (question_id, title, description, author_id, moderation_status) VALUES (?, '翻页关键词题', '', 7101, 1)", id)
+	}
+	for i, name := range []string{"翻页关键词甲", "翻页关键词乙", "翻页关键词丙"} {
+		mustExecSearch(t, temp,
+			"INSERT INTO user (user_id, username, email, role, password) VALUES (?, ?, ?, 'user', 'x')",
+			snowflake.GenerateID(), name, "px"+strconv.Itoa(i)+"@t")
+	}
+
+	m := &MySQLFallback{DB: temp}
+	ctx := context.Background()
+	seen := make(map[string]bool)
+	pages := 0
+	cursor := ""
+	for {
+		res, err := m.Search(ctx, Query{Keyword: "翻页关键词", Scope: "all", Limit: 10, Cursor: cursor})
+		if err != nil {
+			t.Fatalf("search page %d: %v", pages+1, err)
+		}
+		for _, it := range res.Items {
+			key := it.DocumentType + ":" + it.DocumentID
+			if seen[key] {
+				t.Fatalf("duplicate across pages: %s", key)
+			}
+			seen[key] = true
+		}
+		pages++
+		if !res.HasMore {
+			break
+		}
+		cursor = res.NextCursor
+		if pages > 10 {
+			t.Fatal("pagination did not terminate")
+		}
+	}
+	// 12 问题 + 3 用户全部命中（用户名 LIKE 命中 3 个 + 问题标题 12 个）
+	if len(seen) != nQuestions+3 {
+		t.Fatalf("seen = %d, want %d", len(seen), nQuestions+3)
+	}
+	if pages != 2 {
+		t.Fatalf("pages = %d, want 2 (limit 10, 15 items)", pages)
+	}
+
+	// 非法游标拒绝
+	if _, err = m.Search(ctx, Query{Keyword: "翻页关键词", Scope: "all", Limit: 10, Cursor: "%%%bad"}); err == nil {
+		t.Fatal("invalid cursor should fail")
 	}
 }
