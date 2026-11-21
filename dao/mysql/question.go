@@ -40,7 +40,8 @@ func CreateQuestion(q *models.Question, topicIDs []int64, moderationStatus int32
 func GetQuestionByID(id int64) (q *models.Question, err error) {
 	q = new(models.Question)
 	sqlStr := `SELECT question_id, title, description, author_id, answer_count,
-		      comment_count, follower_count, view_count, status, create_time
+		      comment_count, follower_count, view_count, status, resolution_status,
+		      COALESCE(accepted_answer_id, 0) AS accepted_answer_id, create_time, update_time
 		      FROM question WHERE question_id = ? AND status = 1`
 	if err = db.Get(q, sqlStr, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -57,7 +58,8 @@ func GetQuestionByID(id int64) (q *models.Question, err error) {
 func GetQuestionPublicByID(id int64, viewerID int64) (q *models.Question, err error) {
 	q = new(models.Question)
 	sqlStr := `SELECT q.question_id, q.title, q.description, q.author_id, q.answer_count,
-		      q.comment_count, q.follower_count, q.view_count, q.status, q.create_time
+		      q.comment_count, q.follower_count, q.view_count, q.status, q.resolution_status,
+		      COALESCE(q.accepted_answer_id, 0) AS accepted_answer_id, q.create_time, q.update_time
 		      FROM question q JOIN user u ON u.user_id = q.author_id AND u.status = 1
 		      WHERE q.question_id = ? AND q.status = 1
 		      AND q.moderation_status = 1 AND q.deleted_at IS NULL
@@ -95,7 +97,8 @@ func GetQuestionsByIDs(ids []int64) (questions []*models.Question, err error) {
 	}
 	questions = make([]*models.Question, 0, len(ids))
 	query, args, err := sqlx.In(`SELECT question_id, title, description, author_id, answer_count,
-		comment_count, follower_count, view_count, status, create_time
+		comment_count, follower_count, view_count, status, resolution_status,
+		COALESCE(accepted_answer_id, 0) AS accepted_answer_id, create_time, update_time
 		FROM question WHERE question_id IN (?)`, ids)
 	if err != nil {
 		return nil, err

@@ -112,7 +112,8 @@ func CreateAnswer(questionID int64, p *models.ParamCreateAnswer, authorID int64)
 // ListAnswers 问题下的回答列表（cursor 分页）
 // 问题不存在或已软删除时统一不可见（公开入口不返回已删除内容的数据）
 func ListAnswers(questionID int64, order, cursor string, limit int) (*models.PageResult[*models.ApiAnswerDetail], error) {
-	if _, err := mysql.GetQuestionByID(questionID); err != nil {
+	question, err := mysql.GetQuestionByID(questionID)
+	if err != nil {
 		if errors.Is(err, mysql.ErrQuestionNotExist) {
 			return nil, ErrQuestionNotExist
 		}
@@ -134,9 +135,10 @@ func ListAnswers(questionID int64, order, cursor string, limit int) (*models.Pag
 		return nil, ErrCursorInvalid
 	}
 	params := &mysql.AnswerPageParams{
-		QuestionID: questionID,
-		Order:      order,
-		Limit:      limit,
+		QuestionID:       questionID,
+		Order:            order,
+		Limit:            limit,
+		AcceptedAnswerID: question.AcceptedAnswerID, // 采纳回答首页置顶、翻页不重复
 	}
 	if cp != nil {
 		params.CursorTime = cp.Time
@@ -160,6 +162,7 @@ func ListAnswers(questionID int64, order, cursor string, limit int) (*models.Pag
 		if err != nil {
 			return nil, err
 		}
+		a.Accepted = question.AcceptedAnswerID == a.ID // 派生标记：采纳回答前端高亮
 		items = append(items, &models.ApiAnswerDetail{
 			Answer:     a,
 			AuthorName: user.Username,

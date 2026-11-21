@@ -55,52 +55,84 @@ type AnswerPageParams struct {
 	CursorID   int64
 	CursorVote int32
 	Limit      int
+	// AcceptedAnswerID 采纳回答（>0 时从游标流中排除并在首页置顶返回，
+	// 保证采纳置顶与 keyset 分页不重复不遗漏）
+	AcceptedAnswerID int64
 }
+
+// answerVisibleCols 回答列表统一查询列
+const answerVisibleCols = `answer_id, question_id, author_id, content, vote_count,
+		   comment_count, collect_count, status, create_time, update_time`
 
 // ListAnswersByQuestion 按 cursor 分页查询问题的回答
 // latest: create_time DESC, answer_id DESC；hot: vote_count DESC, answer_id DESC
+// 采纳回答始终排在第一页首位（从游标流排除，翻页不重复出现）
 func ListAnswersByQuestion(p *AnswerPageParams) (answers []*models.Answer, err error) {
 	answers = make([]*models.Answer, 0)
 	zeroCursor := p.CursorID == 0
-	limit := p.Limit + 1 // 多取一条判断 has_more
+	limit := p.Limit
+
+	excludeAccepted := ""
+	argsBase := []interface{}{p.QuestionID}
+	if p.AcceptedAnswerID > 0 {
+		excludeAccepted = " AND answer_id != ?"
+		argsBase = append(argsBase, p.AcceptedAnswerID)
+		if zeroCursor {
+			// 首页给采纳回答留一个位置（has_more 由下方 limit+1 判定）
+			limit--
+		}
+	}
+	if limit <= 0 {
+		// 首页只有采纳回答一条时仍需探测 has_more
+		limit = 1
+	}
+	fetchLimit := limit + 1 // 多取一条判断 has_more
 
 	var query string
 	var args []interface{}
 	if p.Order == models.AnswerOrderHot {
 		if zeroCursor {
-			query = `SELECT answer_id, question_id, author_id, content, vote_count,
-				 comment_count, collect_count, status, create_time
-				 FROM answer WHERE question_id = ? AND status = 1
+			query = `SELECT ` + answerVisibleCols + ` FROM answer
+				 WHERE question_id = ? AND status = 1` + excludeAccepted + `
 				 ORDER BY vote_count DESC, answer_id DESC LIMIT ?`
-			args = []interface{}{p.QuestionID, limit}
+			args = append(argsBase, fetchLimit)
 		} else {
-			query = `SELECT answer_id, question_id, author_id, content, vote_count,
-				 comment_count, collect_count, status, create_time
-				 FROM answer WHERE question_id = ? AND status = 1
+			query = `SELECT ` + answerVisibleCols + ` FROM answer
+				 WHERE question_id = ? AND status = 1` + excludeAccepted + `
 				 AND (vote_count < ? OR (vote_count = ? AND answer_id < ?))
 				 ORDER BY vote_count DESC, answer_id DESC LIMIT ?`
-			args = []interface{}{p.QuestionID, p.CursorVote, p.CursorVote, p.CursorID, limit}
+			args = append(argsBase, p.CursorVote, p.CursorVote, p.CursorID, fetchLimit)
 		}
 	} else {
 		if zeroCursor {
-			query = `SELECT answer_id, question_id, author_id, content, vote_count,
-				 comment_count, collect_count, status, create_time
-				 FROM answer WHERE question_id = ? AND status = 1
+			query = `SELECT ` + answerVisibleCols + ` FROM answer
+				 WHERE question_id = ? AND status = 1` + excludeAccepted + `
 				 ORDER BY create_time DESC, answer_id DESC LIMIT ?`
-			args = []interface{}{p.QuestionID, limit}
+			args = append(argsBase, fetchLimit)
 		} else {
-			query = `SELECT answer_id, question_id, author_id, content, vote_count,
-				 comment_count, collect_count, status, create_time
-				 FROM answer WHERE question_id = ? AND status = 1
+			query = `SELECT ` + answerVisibleCols + ` FROM answer
+				 WHERE question_id = ? AND status = 1` + excludeAccepted + `
 				 AND (create_time < ? OR (create_time = ? AND answer_id < ?))
 				 ORDER BY create_time DESC, answer_id DESC LIMIT ?`
-			args = []interface{}{p.QuestionID, p.CursorTime, p.CursorTime, p.CursorID, limit}
+			args = append(argsBase, p.CursorTime, p.CursorTime, p.CursorID, fetchLimit)
 		}
 	}
 	err = db.Select(&answers, query, args...)
 	if err != nil {
 		zap.L().Error("query answers failed", zap.Error(err))
 		return nil, err
+	}
+	// 首页把采纳回答插到最前
+	if p.AcceptedAnswerID > 0 && zeroCursor {
+		accepted := new(models.Answer)
+		err = db.Get(accepted,
+			"SELECT "+answerVisibleCols+" FROM answer WHERE answer_id = ? AND question_id = ? AND status = 1",
+			p.AcceptedAnswerID, p.QuestionID)
+		if err == nil {
+			answers = append([]*models.Answer{accepted}, answers...)
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
 	}
 	return answers, nil
 }
@@ -124,7 +156,8 @@ func UpdateAnswer(answerID, authorID int64, content string) (bool, error) {
 	return n > 0, nil
 }
 
-// SoftDeleteAnswer 作者软删除回答，并以关系表为准重算问题回答数
+// SoftDeleteAnswer 作者软删除回答，并以关系表为准重算问题回答数。
+// 若该回答是采纳答案：同一事务内清空采纳并恢复问题为 open（审计事件记录），避免悬空采纳。
 func SoftDeleteAnswer(answerID, authorID int64) (bool, error) {
 	tx, err := db.Beginx()
 	if err != nil {
@@ -144,6 +177,17 @@ func SoftDeleteAnswer(answerID, authorID int64) (bool, error) {
 		"UPDATE question SET answer_count = (SELECT COUNT(*) FROM answer WHERE question_id = ? AND status = 1) "+
 			"WHERE question_id = (SELECT question_id FROM answer WHERE answer_id = ?)", answerID, answerID); err != nil {
 		return false, err
+	}
+	// 删除采纳答案 → 清空采纳关系并恢复 open（幂等：未被采纳时无行受影响）
+	q := new(questionResolutionRow)
+	err = tx.Get(q, "SELECT "+questionResolutionColumns+" FROM question WHERE accepted_answer_id = ? FOR UPDATE", answerID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, err
+	}
+	if err == nil {
+		if _, err = clearAcceptanceLocked(tx, q.QuestionID, q.Version, "answer_deleted", "", authorID); err != nil {
+			return false, err
+		}
 	}
 	return true, tx.Commit()
 }

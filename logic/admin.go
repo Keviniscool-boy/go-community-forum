@@ -148,6 +148,13 @@ func ModerateContent(actorID int64, targetType, action, targetID, requestID stri
 	if err := mysql.SetModeration(tt, id, code, actorID); err != nil {
 		return err
 	}
+	// 回答被下架/隔离后不再满足"公开可采纳"条件：自动清空采纳并恢复问题 open（PRD §4.2）
+	if tt == models.ReportTargetAnswer && action != "approve" {
+		if _, err := mysql.ClearAcceptanceByAnswer(id, "moderation_"+action, requestID, actorID); err != nil {
+			zap.L().Error("clear acceptance after moderation failed",
+				zap.Int64("answer_id", id), zap.Error(err))
+		}
+	}
 	metadata, _ := json.Marshal(map[string]string{"action": action})
 	logAdminAction(actorID, "content_moderate", targetType, targetID, requestID, string(metadata))
 	return nil
@@ -166,6 +173,11 @@ func SetUserEnabled(actorID int64, targetUserID int64, enable bool, requestID st
 	if !enable {
 		if _, err := mysql.IncrementTokenVersion(targetUserID); err == nil {
 			redis.InvalidateTokenVersionCache(targetUserID)
+		}
+		// 作者禁用 → 其回答不再满足公开可采纳条件，自动清空相关采纳并恢复问题 open（PRD §4.2）
+		if _, err := mysql.ClearAcceptancesForAuthor(targetUserID, requestID, actorID); err != nil {
+			zap.L().Error("clear acceptances after user disable failed",
+				zap.Int64("user_id", targetUserID), zap.Error(err))
 		}
 	}
 	action := "user_disable"

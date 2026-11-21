@@ -71,6 +71,12 @@ func Setup() *gin.Engine {
 	v1.DELETE("/questions/:id/follow", middlewares.JWTAuthMiddleware(), controller.UnfollowQuestionHandler)
 	v1.GET("/questions/:id/interactions", middlewares.OptionalAuthMiddleware(), controller.GetQuestionInteractionsHandler)
 
+	// 问答解决闭环（产品审计 PRD §4.4）
+	v1.POST("/questions/:id/answers/:answer_id/accept", middlewares.JWTAuthMiddleware(), controller.AcceptAnswerHandler)
+	v1.DELETE("/questions/:id/answers/:answer_id/accept", middlewares.JWTAuthMiddleware(), controller.UnacceptAnswerHandler)
+	v1.PATCH("/questions/:id/status", middlewares.JWTAuthMiddleware(), controller.SetQuestionStatusHandler)
+	v1.GET("/me/content", middlewares.JWTAuthMiddleware(), controller.ListMyContentHandler)
+
 	// 评论相关路由
 	v1.POST("/comments", middlewares.JWTAuthMiddleware(), controller.CreateCommentHandler)
 	v1.GET("/comments", controller.ListCommentsHandler)

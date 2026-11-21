@@ -24,11 +24,13 @@ func TargetTypeToCode(s string) int32 {
 
 // 通知类型
 const (
-	NotifyTypeLike    = 1 // 赞同
-	NotifyTypeComment = 2 // 评论
-	NotifyTypeFollow  = 3 // 关注
-	NotifyTypeCollect = 4 // 收藏
-	NotifyTypeDM      = 5 // 私信（outbox worker 投递）
+	NotifyTypeLike     = 1 // 赞同
+	NotifyTypeComment  = 2 // 评论
+	NotifyTypeFollow   = 3 // 关注
+	NotifyTypeCollect  = 4 // 收藏
+	NotifyTypeDM       = 5 // 私信（outbox worker 投递）
+	NotifyTypeAccept   = 6 // 回答被采纳
+	NotifyTypeUnaccept = 7 // 采纳被撤销
 )
 
 // Comment 评论模型
