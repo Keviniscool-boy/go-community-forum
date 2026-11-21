@@ -90,6 +90,8 @@ func Setup() *gin.Engine {
 	v1.GET("/users/:id", controller.GetUserProfileHandler)
 	v1.GET("/users/:id/questions", controller.ListUserQuestionsHandler)
 	v1.GET("/users/:id/answers", controller.ListUserAnswersHandler)
+	v1.GET("/users/:id/articles", controller.ListUserArticlesHandler)
+	v1.GET("/users/:id/columns", controller.ListUserColumnsHandler)
 
 	// 搜索（公开，游客可搜公开内容）
 	v1.GET("/search", controller.SearchHandler)

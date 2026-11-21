@@ -255,6 +255,32 @@ func ListColumns(limit int) (columns []*models.Column, err error) {
 	return
 }
 
+// ListArticlesByAuthor 用户公开文章列表（统一可见条件；用户主页作品展示）
+func ListArticlesByAuthor(authorID int64, limit int) (articles []*models.Article, err error) {
+	articles = make([]*models.Article, 0)
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	err = db.Select(&articles, `SELECT article_id, author_id, COALESCE(column_id, 0) AS column_id, title,
+		LEFT(content, 200) AS content, view_count, status, moderation_status, visibility,
+		deleted_at, update_time, create_time
+		FROM article a JOIN user u ON u.user_id = a.author_id AND u.status = 1
+		WHERE a.author_id = ? AND a.status = 1 AND a.moderation_status = 1
+		AND a.visibility = 1 AND a.deleted_at IS NULL
+		ORDER BY a.create_time DESC, a.article_id DESC LIMIT ?`, authorID, limit)
+	return
+}
+
+// ListPublicColumnsByOwner 用户公开专栏列表（统一可见条件；用户主页作品展示）
+func ListPublicColumnsByOwner(ownerID int64) (columns []*models.Column, err error) {
+	columns = make([]*models.Column, 0)
+	err = db.Select(&columns, `SELECT column_id, owner_id, name, description, status, moderation_status,
+		visibility, deleted_at, create_time FROM column_info c JOIN user u ON u.user_id = c.owner_id AND u.status = 1
+		WHERE c.owner_id = ? AND c.status = 1 AND c.moderation_status = 1 AND c.visibility = 1
+		AND c.deleted_at IS NULL ORDER BY c.create_time DESC`, ownerID)
+	return
+}
+
 // ListColumnsByOwner 所有者的专栏
 func ListColumnsByOwner(ownerID int64) (columns []*models.Column, err error) {
 	columns = make([]*models.Column, 0)

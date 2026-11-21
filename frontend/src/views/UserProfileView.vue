@@ -3,7 +3,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { fetchUserProfile, fetchUserQuestions, fetchUserAnswers, type UserProfile } from '@/api/user'
+import { fetchUserProfile, fetchUserQuestions, fetchUserAnswers, fetchUserArticles, fetchUserColumns, type UserProfile } from '@/api/user'
 import { followUser, unfollowUser } from '@/api/interaction'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/api/http'
@@ -20,10 +20,12 @@ const userId = route.params.id as string
 const profile = ref<UserProfile | null>(null)
 const loading = ref(false)
 const error = ref('')
-const tab = ref<'questions' | 'answers'>('questions')
+const tab = ref<'questions' | 'answers' | 'articles' | 'columns'>('questions')
 
 const questions = ref<Array<{ id: string; title: string; answer_count: number; view_count: number; create_time: string }>>([])
 const answers = ref<Array<{ id: string; question_id: string; content: string; vote_count: number; create_time: string; question_title?: string }>>([])
+const articles = ref<Array<{ id: string; title: string; content: string; view_count: number; create_time: string }>>([])
+const columns = ref<Array<{ id: string; name: string; description: string; create_time: string }>>([])
 const listLoading = ref(false)
 
 const defaultAvatar = computed(
@@ -54,8 +56,12 @@ async function loadTab() {
   try {
     if (tab.value === 'questions') {
       questions.value = (await fetchUserQuestions(userId)) || []
-    } else {
+    } else if (tab.value === 'answers') {
       answers.value = (await fetchUserAnswers(userId)) || []
+    } else if (tab.value === 'articles') {
+      articles.value = (await fetchUserArticles(userId)) || []
+    } else {
+      columns.value = (await fetchUserColumns(userId)) || []
     }
   } catch (e) {
     if (e instanceof ApiError) ElMessage.error(e.message)
@@ -64,7 +70,7 @@ async function loadTab() {
   }
 }
 
-function switchTab(t: 'questions' | 'answers') {
+function switchTab(t: 'questions' | 'answers' | 'articles' | 'columns') {
   if (tab.value === t) return
   tab.value = t
   loadTab()
@@ -135,6 +141,12 @@ onMounted(load)
         <button class="tab-btn" :class="{ active: tab === 'answers' }" @click="switchTab('answers')">
           回答 {{ profile.answer_count }}
         </button>
+        <button class="tab-btn" :class="{ active: tab === 'articles' }" @click="switchTab('articles')">
+          文章
+        </button>
+        <button class="tab-btn" :class="{ active: tab === 'columns' }" @click="switchTab('columns')">
+          专栏
+        </button>
       </div>
 
       <div v-if="listLoading" class="bb-card"><LoadingState /></div>
@@ -145,7 +157,7 @@ onMounted(load)
           <div class="content-meta">{{ q.answer_count }} 回答 · {{ q.view_count }} 浏览 · {{ q.create_time?.slice(0, 10) }}</div>
         </article>
       </div>
-      <div v-else>
+      <div v-else-if="tab === 'answers'">
         <div v-if="answers.length === 0" class="bb-card"><EmptyState text="还没有回答" /></div>
         <article v-for="a in answers" :key="a.id" class="bb-card content-card">
           <router-link class="content-title" :to="`/questions/${a.question_id}`">
@@ -153,6 +165,22 @@ onMounted(load)
           </router-link>
           <p class="content-excerpt">{{ a.content }}</p>
           <div class="content-meta">{{ a.vote_count }} 赞同 · {{ a.create_time?.slice(0, 10) }}</div>
+        </article>
+      </div>
+      <div v-else-if="tab === 'articles'">
+        <div v-if="articles.length === 0" class="bb-card"><EmptyState text="还没有公开文章" /></div>
+        <article v-for="a in articles" :key="a.id" class="bb-card content-card">
+          <router-link class="content-title" :to="`/articles/${a.id}`">{{ a.title }}</router-link>
+          <p class="content-excerpt">{{ a.content }}</p>
+          <div class="content-meta">{{ a.view_count }} 阅读 · {{ a.create_time?.slice(0, 10) }}</div>
+        </article>
+      </div>
+      <div v-else>
+        <div v-if="columns.length === 0" class="bb-card"><EmptyState text="还没有公开专栏" /></div>
+        <article v-for="c in columns" :key="c.id" class="bb-card content-card">
+          <router-link class="content-title" :to="`/columns/${c.id}`">{{ c.name }}</router-link>
+          <p class="content-excerpt">{{ c.description }}</p>
+          <div class="content-meta">{{ c.create_time?.slice(0, 10) }}</div>
         </article>
       </div>
     </template>

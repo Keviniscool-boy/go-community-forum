@@ -1,5 +1,6 @@
 <script setup lang="ts">
-// 搜索页：关键词、类型筛选、排序、结果列表、空/错误状态
+// 搜索页：关键词、类型筛选（含文章/专栏）、排序、结果列表、空/错误状态
+// 搜索条件（q/scope/sort）写入 URL，可复制、浏览器返回可用（PRD §5.1）
 import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { search, type SearchResultItem } from '@/api/search'
@@ -11,8 +12,8 @@ const route = useRoute()
 const router = useRouter()
 
 const keyword = ref((route.query.q as string) || '')
-const scope = ref('all')
-const sort = ref('relevance')
+const scope = ref(asScope(route.query.scope))
+const sort = ref(asSort(route.query.sort))
 const items = ref<SearchResultItem[]>([])
 const loading = ref(false)
 const error = ref('')
@@ -21,7 +22,27 @@ const finished = ref(false)
 const cursor = ref('')
 
 const typeLabels: Record<string, string> = {
-  question: '问题', answer: '回答', user: '用户', topic: '话题',
+  question: '问题', answer: '回答', article: '文章', column: '专栏', user: '用户', topic: '话题',
+}
+
+function asScope(v: unknown): string {
+  const s = typeof v === 'string' ? v : 'all'
+  return ['all', 'question', 'answer', 'article', 'column', 'user', 'topic'].includes(s) ? s : 'all'
+}
+
+function asSort(v: unknown): string {
+  const s = typeof v === 'string' ? v : 'relevance'
+  return s === 'latest' ? 'latest' : 'relevance'
+}
+
+function syncUrl() {
+  router.replace({
+    query: {
+      ...(keyword.value.trim() ? { q: keyword.value.trim() } : {}),
+      ...(scope.value !== 'all' ? { scope: scope.value } : {}),
+      ...(sort.value !== 'relevance' ? { sort: sort.value } : {}),
+    },
+  })
 }
 
 async function load(reset = false) {
@@ -49,21 +70,44 @@ async function load(reset = false) {
 function itemLink(item: SearchResultItem): string {
   switch (item.document_type) {
     case 'question': return `/questions/${item.document_id}`
-    case 'answer': return `/questions/${item.document_id}`
+    case 'answer': return `/questions/${item.question_id || item.document_id}`
+    case 'article': return `/articles/${item.document_id}`
+    case 'column': return `/columns/${item.document_id}`
     case 'user': return `/users/${item.document_id}`
     case 'topic': return `/topics/${item.document_id}`
   }
   return '/'
 }
 
-watch([scope, sort], () => load(true))
+// scope/sort 变化：同步 URL 并重查
+watch([scope, sort], () => {
+  syncUrl()
+  load(true)
+})
+
+// 浏览器前进/后退：URL 变化驱动查询
+watch(
+  () => route.query,
+  (q) => {
+    if (route.name !== 'search') return
+    const nextScope = asScope(q.scope)
+    const nextSort = asSort(q.sort)
+    const nextKeyword = (q.q as string) || ''
+    if (nextKeyword !== keyword.value || nextScope !== scope.value || nextSort !== sort.value) {
+      keyword.value = nextKeyword
+      scope.value = nextScope
+      sort.value = nextSort
+      if (keyword.value) load(true)
+    }
+  },
+)
 
 onMounted(() => {
   if (keyword.value) load(true)
 })
 
 function submit() {
-  router.replace({ query: { q: keyword.value } })
+  syncUrl()
   load(true)
 }
 </script>
@@ -74,7 +118,7 @@ function submit() {
       <el-input
         v-model="keyword"
         size="large"
-        placeholder="搜索问题、回答、用户、话题…"
+        placeholder="搜索问题、回答、文章、专栏、用户、话题…"
         @keyup.enter="submit"
       />
       <el-button type="primary" size="large" :loading="loading" @click="submit">搜索</el-button>
@@ -85,6 +129,8 @@ function submit() {
         <el-radio-button value="all">全部</el-radio-button>
         <el-radio-button value="question">问题</el-radio-button>
         <el-radio-button value="answer">回答</el-radio-button>
+        <el-radio-button value="article">文章</el-radio-button>
+        <el-radio-button value="column">专栏</el-radio-button>
         <el-radio-button value="user">用户</el-radio-button>
         <el-radio-button value="topic">话题</el-radio-button>
       </el-radio-group>
@@ -97,13 +143,16 @@ function submit() {
     <div v-if="loading && items.length === 0" class="bb-card"><LoadingState /></div>
     <div v-else-if="error" class="bb-card"><ErrorState :text="error" @retry="load(true)" /></div>
     <div v-else-if="searched && items.length === 0" class="bb-card">
-      <EmptyState text="没有找到相关内容" />
+      <EmptyState text="没有找到相关内容">
+        <p class="empty-hint">试试更换关键词，或切换到"全部"类型再搜索</p>
+      </EmptyState>
     </div>
     <template v-else>
       <article v-for="item in items" :key="`${item.document_type}-${item.document_id}`" class="bb-card result-card">
         <router-link class="result-title" :to="itemLink(item)">{{ item.title }}</router-link>
         <div class="result-meta">
           <el-tag size="small" effect="plain">{{ typeLabels[item.document_type] || item.document_type }}</el-tag>
+          <el-tag v-if="item.solved" size="small" type="success" effect="light">已解决</el-tag>
           <p class="result-excerpt">{{ item.excerpt }}</p>
         </div>
       </article>
@@ -145,10 +194,23 @@ function submit() {
   &:hover { color: var(--bb-primary); }
 }
 
+.result-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
 .result-excerpt {
-  margin: 6px 0 0;
+  margin: 0;
   color: var(--bb-text-secondary);
   font-size: 13px;
+}
+
+.empty-hint {
+  color: var(--bb-text-tertiary);
+  font-size: 13px;
+  margin-top: 8px;
 }
 
 .load-more { margin-bottom: 24px; }

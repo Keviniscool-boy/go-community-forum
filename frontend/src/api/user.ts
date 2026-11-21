@@ -25,6 +25,16 @@ export function fetchUserQuestions(id: string) {
   return http.get<import('./question').QuestionDetail[]>(`users/${id}/questions`)
 }
 
+// 用户公开文章列表（用户主页作品聚合）
+export function fetchUserArticles(id: string) {
+  return http.get<import('./article').ArticleDetail[]>(`users/${id}/articles`)
+}
+
+// 用户公开专栏列表（用户主页作品聚合）
+export function fetchUserColumns(id: string) {
+  return http.get<import('./article').ColumnDetail[]>(`users/${id}/columns`)
+}
+
 // 用户的回答列表
 export function fetchUserAnswers(id: string) {
   return http.get<

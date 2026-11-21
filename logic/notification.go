@@ -185,3 +185,26 @@ func ListUserAnswers(userID int64, limit int) (answers []*models.ApiAnswerDetail
 	}
 	return mysql.ListUserAnswers(userID, limit)
 }
+
+// ListUserArticles 用户的公开文章列表（用户主页作品聚合）
+func ListUserArticles(userID int64, limit int) (articles []*models.Article, err error) {
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	return mysql.ListArticlesByAuthor(userID, limit)
+}
+
+// ListUserColumns 用户的公开专栏列表（用户主页作品聚合）
+func ListUserColumns(userID int64, limit int) (columns []*models.Column, err error) {
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	columns, err = mysql.ListPublicColumnsByOwner(userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(columns) > limit {
+		columns = columns[:limit]
+	}
+	return columns, nil
+}

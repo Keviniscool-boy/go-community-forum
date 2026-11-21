@@ -137,3 +137,35 @@ func ListUserAnswersHandler(c *gin.Context) {
 	}
 	ResponseSuccess(c, data)
 }
+// ListUserArticlesHandler 用户公开文章列表（用户主页作品聚合）
+func ListUserArticlesHandler(c *gin.Context) {
+	targetID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || targetID <= 0 {
+		ResponseError(c, CodeInvalidParams)
+		return
+	}
+	data, err := logic.ListUserArticles(targetID, atoiDefault(c.Query("limit"), 20))
+	if err != nil {
+		zap.L().Error("logic.ListUserArticles failed", zap.Error(err))
+		ResponseError(c, CodeServerBusy)
+		return
+	}
+	ResponseSuccess(c, data)
+}
+
+// ListUserColumnsHandler 用户公开专栏列表（用户主页作品聚合）
+func ListUserColumnsHandler(c *gin.Context) {
+	targetID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || targetID <= 0 {
+		ResponseError(c, CodeInvalidParams)
+		return
+	}
+	data, err := logic.ListUserColumns(targetID, atoiDefault(c.Query("limit"), 20))
+	if err != nil {
+		zap.L().Error("logic.ListUserColumns failed", zap.Error(err))
+		ResponseError(c, CodeServerBusy)
+		return
+	}
+	ResponseSuccess(c, data)
+}
+

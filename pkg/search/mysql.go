@@ -23,6 +23,8 @@ type scopedRow struct {
 	Title      string  `db:"title"`
 	Excerpt    string  `db:"excerpt"`
 	AuthorID   int64   `db:"author_id"`
+	Solved     bool    `db:"solved"`
+	QuestionID int64   `db:"question_id"`
 	Score      float64 `db:"score"`
 	CreateTime int64   `db:"create_time"`
 }
@@ -46,8 +48,8 @@ func (m *MySQLFallback) Search(ctx context.Context, q Query) (Result, error) {
 		limit = 20
 	}
 	limit++
-	scopes := map[string]bool{"question": true, "answer": true, "user": true, "topic": true, "article": true}
-	selected := []string{"question", "answer", "article", "user", "topic"}
+	scopes := map[string]bool{"question": true, "answer": true, "user": true, "topic": true, "article": true, "column": true}
+	selected := []string{"question", "answer", "article", "user", "topic", "column"}
 	if q.Scope != "all" && scopes[q.Scope] {
 		selected = []string{q.Scope}
 	}
@@ -69,6 +71,7 @@ func (m *MySQLFallback) Search(ctx context.Context, q Query) (Result, error) {
 	case contains(selected, "question"):
 		union += fmt.Sprintf(`(SELECT 'question' AS item_type, q.question_id AS item_id, q.title AS title,
 			LEFT(q.description, 200) AS excerpt, q.author_id AS author_id,
+			q.resolution_status = 1 AS solved, 0 AS question_id,
 			(CASE WHEN q.title LIKE ? THEN 3 ELSE 0 END + CASE WHEN q.description LIKE ? THEN 1 ELSE 0 END) AS score,
 			UNIX_TIMESTAMP(q.create_time) AS create_time
 			FROM question q JOIN user u ON u.user_id = q.author_id AND u.status = 1
@@ -79,6 +82,7 @@ func (m *MySQLFallback) Search(ctx context.Context, q Query) (Result, error) {
 	if contains(selected, "article") {
 		union += fmt.Sprintf(`(SELECT 'article' AS item_type, a.article_id AS item_id, a.title AS title,
 			LEFT(a.content, 200) AS excerpt, a.author_id AS author_id,
+			0 AS solved, 0 AS question_id,
 			(CASE WHEN a.title LIKE ? THEN 3 ELSE 0 END + CASE WHEN a.content LIKE ? THEN 1 ELSE 0 END) AS score,
 			UNIX_TIMESTAMP(a.create_time) AS create_time
 			FROM article a JOIN user u ON u.user_id = a.author_id AND u.status = 1
@@ -86,9 +90,21 @@ func (m *MySQLFallback) Search(ctx context.Context, q Query) (Result, error) {
 			AND (a.title LIKE ? OR a.content LIKE ?) LIMIT %d)`, perScopeLimit)
 		union += " UNION ALL "
 	}
+	if contains(selected, "column") {
+		union += fmt.Sprintf(`(SELECT 'column' AS item_type, c.column_id AS item_id, c.name AS title,
+			LEFT(c.description, 200) AS excerpt, c.owner_id AS author_id,
+			0 AS solved, 0 AS question_id,
+			(CASE WHEN c.name LIKE ? THEN 3 ELSE 0 END + CASE WHEN c.description LIKE ? THEN 1 ELSE 0 END) AS score,
+			UNIX_TIMESTAMP(c.create_time) AS create_time
+			FROM column_info c JOIN user u ON u.user_id = c.owner_id AND u.status = 1
+			WHERE c.status = 1 AND c.moderation_status = 1 AND c.visibility = 1 AND c.deleted_at IS NULL
+			AND (c.name LIKE ? OR c.description LIKE ?) LIMIT %d)`, perScopeLimit)
+		union += " UNION ALL "
+	}
 	if contains(selected, "answer") {
 		union += fmt.Sprintf(`(SELECT 'answer' AS item_type, a.answer_id AS item_id, qu.title AS title,
 			LEFT(a.content, 200) AS excerpt, a.author_id AS author_id,
+			0 AS solved, qu.question_id AS question_id,
 			(CASE WHEN a.content LIKE ? THEN 1 ELSE 0 END + CASE WHEN qu.title LIKE ? THEN 2 ELSE 0 END) AS score,
 			UNIX_TIMESTAMP(a.create_time) AS create_time
 			FROM answer a
@@ -100,6 +116,7 @@ func (m *MySQLFallback) Search(ctx context.Context, q Query) (Result, error) {
 	if contains(selected, "user") {
 		union += fmt.Sprintf(`(SELECT 'user' AS item_type, u.user_id AS item_id, u.username AS title,
 			LEFT(u.bio, 200) AS excerpt, u.user_id AS author_id,
+			0 AS solved, 0 AS question_id,
 			(CASE WHEN u.username LIKE ? THEN 3 ELSE 0 END + CASE WHEN u.bio LIKE ? THEN 1 ELSE 0 END) AS score,
 			UNIX_TIMESTAMP(NOW()) AS create_time
 			FROM user u WHERE u.status = 1 AND (u.username LIKE ? OR u.bio LIKE ?) LIMIT %d)`, perScopeLimit)
@@ -108,6 +125,7 @@ func (m *MySQLFallback) Search(ctx context.Context, q Query) (Result, error) {
 	if contains(selected, "topic") {
 		union += fmt.Sprintf(`(SELECT 'topic' AS item_type, t.topic_id AS item_id, t.name AS title,
 			LEFT(t.description, 200) AS excerpt, 0 AS author_id,
+			0 AS solved, 0 AS question_id,
 			(CASE WHEN t.name LIKE ? THEN 3 ELSE 0 END + CASE WHEN t.description LIKE ? THEN 1 ELSE 0 END) AS score,
 			UNIX_TIMESTAMP(t.create_time) AS create_time
 			FROM topic t WHERE (t.name LIKE ? OR t.description LIKE ?) LIMIT %d)`, perScopeLimit)
@@ -130,6 +148,9 @@ func (m *MySQLFallback) Search(ctx context.Context, q Query) (Result, error) {
 		addLikes(4)
 	}
 	if contains(selected, "article") {
+		addLikes(4)
+	}
+	if contains(selected, "column") {
 		addLikes(4)
 	}
 	if contains(selected, "answer") {
@@ -155,14 +176,19 @@ func (m *MySQLFallback) Search(ctx context.Context, q Query) (Result, error) {
 	}
 	items := make([]ResultItem, 0, len(rows))
 	for _, r := range rows {
-		items = append(items, ResultItem{
+		item := ResultItem{
 			DocumentType: r.ItemType,
 			DocumentID:   fmt.Sprintf("%d", r.ItemID),
 			Title:        r.Title,
 			Excerpt:      r.Excerpt,
 			AuthorID:     fmt.Sprintf("%d", r.AuthorID),
+			Solved:       r.Solved,
 			CreatedAt:    r.CreateTime,
-		})
+		}
+		if r.QuestionID > 0 {
+			item.QuestionID = fmt.Sprintf("%d", r.QuestionID)
+		}
+		items = append(items, item)
 	}
 	next := ""
 	if hasMore {
