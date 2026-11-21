@@ -378,13 +378,13 @@ func ListComments(p *CommentPageParams) (comments []*models.Comment, err error) 
 	var args []interface{}
 	if p.CursorID == 0 {
 		query = `SELECT comment_id, user_id, target_type, target_id, parent_id, content, status, create_time
-			 FROM comment WHERE target_type = ? AND target_id = ? AND status = 1
+			 FROM comment WHERE target_type = ? AND target_id = ? AND status = 1 AND moderation_status = 1
 			 AND moderation_status = 1 AND deleted_at IS NULL
 			 ORDER BY create_time DESC, comment_id DESC LIMIT ?`
 		args = []interface{}{p.TargetType, p.TargetID, limit}
 	} else {
 		query = `SELECT comment_id, user_id, target_type, target_id, parent_id, content, status, create_time
-			 FROM comment WHERE target_type = ? AND target_id = ? AND status = 1
+			 FROM comment WHERE target_type = ? AND target_id = ? AND status = 1 AND moderation_status = 1
 			 AND moderation_status = 1 AND deleted_at IS NULL
 			 AND (create_time < ? OR (create_time = ? AND comment_id < ?))
 			 ORDER BY create_time DESC, comment_id DESC LIMIT ?`

@@ -6,6 +6,7 @@ package search
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"testing"
@@ -209,5 +210,76 @@ func TestSearchKeysetPaginationNoDupNoMiss(t *testing.T) {
 	// 非法游标拒绝
 	if _, err = m.Search(ctx, Query{Keyword: "翻页关键词", Scope: "all", Limit: 10, Cursor: "%%%bad"}); err == nil {
 		t.Fatal("invalid cursor should fail")
+	}
+}
+
+func TestSearchKeysetStableOnDelete(t *testing.T) {
+	if searchDSN == "" {
+		t.Skip("BB_TEST_MYSQL_DSN not set, skip search integration test")
+	}
+	if err := snowflake.Init("2026-07-24 00:00:00", 1); err != nil {
+		t.Fatalf("init snowflake: %v", err)
+	}
+	root, err := sqlx.Connect("mysql", searchDSN)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() { _ = root.Close() })
+	fullName := "bb_search_del_" + t.Name()
+	mustExecSearch(t, root, "DROP DATABASE IF EXISTS "+fullName)
+	mustExecSearch(t, root, "CREATE DATABASE "+fullName+" DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci")
+
+	temp, err := sqlx.Connect("mysql", searchDSN+fullName+"?charset=utf8mb4&parseTime=True&loc=UTC")
+	if err != nil {
+		t.Fatalf("connect temp: %v", err)
+	}
+	t.Cleanup(func() { _ = temp.Close() })
+	t.Cleanup(func() { mustExecSearch(t, root, "DROP DATABASE IF EXISTS "+fullName) })
+	mysql.SetGlobalDB(temp)
+	if err = mysql.RunMigrations(); err != nil {
+		t.Fatalf("migrations: %v", err)
+	}
+
+	mustExecSearch(t, temp,
+		"INSERT INTO user (user_id, username, email, role, password) VALUES (7201, 'deleter', 'dl@t', 'user', 'x')")
+	ids := make([]int64, 0, 5)
+	for i := 0; i < 5; i++ {
+		id := snowflake.GenerateID()
+		ids = append(ids, id)
+		mustExecSearch(t, temp,
+			"INSERT INTO question (question_id, title, description, author_id, moderation_status) VALUES (?, '删除稳定性问题', '', 7201, 1)", id)
+	}
+
+	m := &MySQLFallback{DB: temp}
+	ctx := context.Background()
+	// 第一页（limit 2）
+	page1, err := m.Search(ctx, Query{Keyword: "删除稳定性", Scope: "question", Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !page1.HasMore || len(page1.Items) != 2 {
+		t.Fatalf("page1: hasMore=%v n=%d", page1.HasMore, len(page1.Items))
+	}
+	// 翻页前删除一条尚未展示的结果（游标键仍有效）
+	deleted := ids[4]
+	mustExecSearch(t, temp, "UPDATE question SET status = 0 WHERE question_id = ?", deleted)
+	page2, err := m.Search(ctx, Query{Keyword: "删除稳定性", Scope: "question", Limit: 2, Cursor: page1.NextCursor})
+	if err != nil {
+		t.Fatalf("page2 after delete: %v", err)
+	}
+	// 结果不重复、不包含已删除项
+	seen := map[string]bool{}
+	for _, it := range append(append([]ResultItem{}, page1.Items...), page2.Items...) {
+		if it.DocumentID == fmt.Sprintf("%d", deleted) {
+			t.Fatal("deleted item must not appear")
+		}
+		if seen[it.DocumentID] {
+			t.Fatalf("duplicate: %s", it.DocumentID)
+		}
+		seen[it.DocumentID] = true
+	}
+	// 剩余 4 条全部可达
+	if len(seen) != 4 {
+		t.Fatalf("seen = %d, want 4", len(seen))
 	}
 }

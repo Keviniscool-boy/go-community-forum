@@ -37,7 +37,8 @@ func GetAnswerByID(id int64) (a *models.Answer, err error) {
 	a = new(models.Answer)
 	sqlStr := `SELECT answer_id, question_id, author_id, content, vote_count,
 		   comment_count, collect_count, status, create_time
-		   FROM answer WHERE answer_id = ? AND status = 1`
+		   FROM answer WHERE answer_id = ? AND status = 1
+		   AND moderation_status = 1 AND visibility = 1 AND deleted_at IS NULL`
 	if err = db.Get(a, sqlStr, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrAnswerNotExist
@@ -93,12 +94,12 @@ func ListAnswersByQuestion(p *AnswerPageParams) (answers []*models.Answer, err e
 	if p.Order == models.AnswerOrderHot {
 		if zeroCursor {
 			query = `SELECT ` + answerVisibleCols + ` FROM answer
-				 WHERE question_id = ? AND status = 1` + excludeAccepted + `
+				 WHERE question_id = ? AND status = 1 AND moderation_status = 1 AND visibility = 1 AND deleted_at IS NULL` + excludeAccepted + `
 				 ORDER BY vote_count DESC, answer_id DESC LIMIT ?`
 			args = append(argsBase, fetchLimit)
 		} else {
 			query = `SELECT ` + answerVisibleCols + ` FROM answer
-				 WHERE question_id = ? AND status = 1` + excludeAccepted + `
+				 WHERE question_id = ? AND status = 1 AND moderation_status = 1 AND visibility = 1 AND deleted_at IS NULL` + excludeAccepted + `
 				 AND (vote_count < ? OR (vote_count = ? AND answer_id < ?))
 				 ORDER BY vote_count DESC, answer_id DESC LIMIT ?`
 			args = append(argsBase, p.CursorVote, p.CursorVote, p.CursorID, fetchLimit)
@@ -106,12 +107,12 @@ func ListAnswersByQuestion(p *AnswerPageParams) (answers []*models.Answer, err e
 	} else {
 		if zeroCursor {
 			query = `SELECT ` + answerVisibleCols + ` FROM answer
-				 WHERE question_id = ? AND status = 1` + excludeAccepted + `
+				 WHERE question_id = ? AND status = 1 AND moderation_status = 1 AND visibility = 1 AND deleted_at IS NULL` + excludeAccepted + `
 				 ORDER BY create_time DESC, answer_id DESC LIMIT ?`
 			args = append(argsBase, fetchLimit)
 		} else {
 			query = `SELECT ` + answerVisibleCols + ` FROM answer
-				 WHERE question_id = ? AND status = 1` + excludeAccepted + `
+				 WHERE question_id = ? AND status = 1 AND moderation_status = 1 AND visibility = 1 AND deleted_at IS NULL` + excludeAccepted + `
 				 AND (create_time < ? OR (create_time = ? AND answer_id < ?))
 				 ORDER BY create_time DESC, answer_id DESC LIMIT ?`
 			args = append(argsBase, p.CursorTime, p.CursorTime, p.CursorID, fetchLimit)
@@ -126,7 +127,8 @@ func ListAnswersByQuestion(p *AnswerPageParams) (answers []*models.Answer, err e
 	if p.AcceptedAnswerID > 0 && zeroCursor {
 		accepted := new(models.Answer)
 		err = db.Get(accepted,
-			"SELECT "+answerVisibleCols+" FROM answer WHERE answer_id = ? AND question_id = ? AND status = 1",
+			"SELECT "+answerVisibleCols+" FROM answer WHERE answer_id = ? AND question_id = ? AND status = 1"+
+				" AND moderation_status = 1 AND visibility = 1 AND deleted_at IS NULL",
 			p.AcceptedAnswerID, p.QuestionID)
 		if err == nil {
 			answers = append([]*models.Answer{accepted}, answers...)
@@ -137,10 +139,20 @@ func ListAnswersByQuestion(p *AnswerPageParams) (answers []*models.Answer, err e
 	return answers, nil
 }
 
-// CountAnswersByQuestion 查询问题的回答总数
+// RecountAnswerCountByAnswer 按回答 id 重算所属问题的公开回答数（派生计数对账用）
+func RecountAnswerCountByAnswer(answerID int64) error {
+	_, err := db.Exec(
+		"UPDATE question SET answer_count = (SELECT COUNT(*) FROM answer WHERE answer.question_id = question.question_id"+
+			" AND status = 1 AND moderation_status = 1 AND visibility = 1 AND deleted_at IS NULL)"+
+			" WHERE question_id = (SELECT question_id FROM answer WHERE answer_id = ?)", answerID)
+	return err
+}
+
+// CountAnswersByQuestion 查询问题的公开回答总数（口径与列表一致：隔离/隐藏/已删除不计入）
 func CountAnswersByQuestion(questionID int64) (int, error) {
 	var count int
-	err := db.Get(&count, "SELECT COUNT(answer_id) FROM answer WHERE question_id = ? AND status = 1", questionID)
+	err := db.Get(&count, "SELECT COUNT(answer_id) FROM answer WHERE question_id = ? AND status = 1"+
+		" AND moderation_status = 1 AND visibility = 1 AND deleted_at IS NULL", questionID)
 	return count, err
 }
 
@@ -174,8 +186,9 @@ func SoftDeleteAnswer(answerID, authorID int64) (bool, error) {
 		return false, nil
 	}
 	if _, err = tx.Exec(
-		"UPDATE question SET answer_count = (SELECT COUNT(*) FROM answer WHERE question_id = ? AND status = 1) "+
-			"WHERE question_id = (SELECT question_id FROM answer WHERE answer_id = ?)", answerID, answerID); err != nil {
+		"UPDATE question SET answer_count = (SELECT COUNT(*) FROM answer WHERE answer.question_id = question.question_id"+
+			" AND status = 1 AND moderation_status = 1 AND visibility = 1 AND deleted_at IS NULL)"+
+			" WHERE question_id = (SELECT question_id FROM answer WHERE answer_id = ?)", answerID); err != nil {
 		return false, err
 	}
 	// 删除采纳答案 → 清空采纳关系并恢复 open（幂等：未被采纳时无行受影响）

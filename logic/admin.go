@@ -149,9 +149,16 @@ func ModerateContent(actorID int64, targetType, action, targetID, requestID stri
 		return err
 	}
 	// 回答被下架/隔离后不再满足"公开可采纳"条件：自动清空采纳并恢复问题 open（PRD §4.2）
-	if tt == models.ReportTargetAnswer && action != "approve" {
-		if _, err := mysql.ClearAcceptanceByAnswer(id, "moderation_"+action, requestID, actorID); err != nil {
-			zap.L().Error("clear acceptance after moderation failed",
+	if tt == models.ReportTargetAnswer {
+		if action != "approve" {
+			if _, err := mysql.ClearAcceptanceByAnswer(id, "moderation_"+action, requestID, actorID); err != nil {
+				zap.L().Error("clear acceptance after moderation failed",
+					zap.Int64("answer_id", id), zap.Error(err))
+			}
+		}
+		// 公开回答数口径与列表一致：审核状态变化后重算派生计数
+		if err := mysql.RecountAnswerCountByAnswer(id); err != nil {
+			zap.L().Error("recount answer_count after moderation failed",
 				zap.Int64("answer_id", id), zap.Error(err))
 		}
 	}

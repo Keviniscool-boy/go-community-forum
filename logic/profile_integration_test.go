@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"bluebell/dao/mysql"
+	"bluebell/models"
 	"bluebell/pkg/snowflake"
 )
 
@@ -64,5 +65,69 @@ func TestUserProfileVisibilityIsolation(t *testing.T) {
 	mustExecFlow(t, d, "UPDATE user SET status = 0 WHERE user_id = ?", authorID)
 	if _, err = GetUserProfile(authorID, 0); !errors.Is(err, mysql.ErrUserNotExist) {
 		t.Fatalf("disabled author profile: want ErrUserNotExist, got %v", err)
+	}
+}
+
+func TestAnswerAndCommentVisibilityInQuestionPage(t *testing.T) {
+	d := resolutionTempDB(t)
+	authorID := int64(9201)
+	responderID := int64(9202)
+	mustExecFlow(t, d,
+		"INSERT INTO user (user_id, username, email, role, password) VALUES (?, 'q_author', 'qa@t', 'user', 'x'), (?, 'q_answerer', 'qb@t', 'user', 'x')",
+		authorID, responderID)
+	qid := snowflake.GenerateID()
+	mustExecFlow(t, d,
+		"INSERT INTO question (question_id, title, description, author_id, moderation_status) VALUES (?, '回答可见性问题', '', ?, 1)",
+		qid, authorID)
+
+	pubA := snowflake.GenerateID()
+	quarA := snowflake.GenerateID()
+	mustExecFlow(t, d, "INSERT INTO answer (answer_id, question_id, author_id, content, moderation_status) VALUES (?, ?, ?, '公开回答', 1)", pubA, qid, responderID)
+	mustExecFlow(t, d, "INSERT INTO answer (answer_id, question_id, author_id, content, moderation_status) VALUES (?, ?, ?, '被隔离回答', 3)", quarA, qid, responderID)
+
+	// 回答列表：隔离回答不出现
+	params := &mysql.AnswerPageParams{QuestionID: qid, Order: models.AnswerOrderLatest, Limit: 20}
+	list, err := mysql.ListAnswersByQuestion(params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].ID != pubA {
+		t.Fatalf("answer list = %d items (want only public)", len(list))
+	}
+	// 计数口径与列表一致
+	var cnt int
+	if err = d.Get(&cnt, "SELECT answer_count FROM question WHERE question_id = ?", qid); err != nil {
+		t.Fatal(err)
+	}
+	_ = cnt
+	if n, err := mysql.CountAnswersByQuestion(qid); err != nil || n != 1 {
+		t.Fatalf("CountAnswersByQuestion = %d err=%v (want 1)", n, err)
+	}
+	// 单条隔离回答：详情拒绝（互动链路 fail-closed）
+	if _, err = mysql.GetAnswerByID(quarA); !errors.Is(err, mysql.ErrAnswerNotExist) {
+		t.Fatalf("quarantined answer detail: want ErrAnswerNotExist, got %v", err)
+	}
+	// 审核下架后重算派生计数
+	mustExecFlow(t, d, "UPDATE question SET answer_count = 2 WHERE question_id = ?", qid)
+	if err = mysql.RecountAnswerCountByAnswer(pubA); err != nil {
+		t.Fatal(err)
+	}
+	if err = d.Get(&cnt, "SELECT answer_count FROM question WHERE question_id = ?", qid); err != nil {
+		t.Fatal(err)
+	}
+	if cnt != 1 {
+		t.Fatalf("answer_count after recount = %d (want 1)", cnt)
+	}
+
+	// 评论：隔离评论不出现
+	c1, c2 := snowflake.GenerateID(), snowflake.GenerateID()
+	mustExecFlow(t, d, "INSERT INTO comment (comment_id, user_id, target_type, target_id, content, status, moderation_status) VALUES (?, ?, 2, ?, '公开评论', 1, 1)", c1, responderID, qid)
+	mustExecFlow(t, d, "INSERT INTO comment (comment_id, user_id, target_type, target_id, content, status, moderation_status) VALUES (?, ?, 2, ?, '被隔离评论', 1, 3)", c2, responderID, qid)
+	cs, err := mysql.ListComments(&mysql.CommentPageParams{TargetType: 2, TargetID: qid, Limit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cs) != 1 || cs[0].CommentID != c1 {
+		t.Fatalf("comment list = %d items (want only public)", len(cs))
 	}
 }
