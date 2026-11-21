@@ -144,7 +144,38 @@ onMounted(load)
 }
 .a-views { display: inline-flex; align-items: center; gap: 4px; }
 .a-actions { margin-bottom: 12px; }
-.a-content { border-top: 1px solid var(--bb-border); padding-top: 16px; line-height: 1.8; word-break: break-word; }
+// 正文可读性（PRD §6.3）：行宽 680–760px、行高 1.65–1.85；图片自适应、代码块横向滚动
+.a-content {
+  border-top: 1px solid var(--bb-border);
+  padding-top: 16px;
+  max-width: 720px;
+  margin: 0 auto;
+  line-height: 1.75;
+  word-break: break-word;
+  font-size: 15px;
+
+  img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+  }
+
+  pre {
+    overflow-x: auto;
+    padding: 12px;
+    background: #f6f8fa;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
+  p code, li code, td code {
+    background: #f6f8fa;
+    padding: 2px 5px;
+    border-radius: 4px;
+  }
+}
 .comments-card { padding: 20px 24px; h3 { margin-top: 0; } }
 .comment-input-row { display: flex; gap: 10px; margin-bottom: 14px; }
 .comments-empty { color: var(--bb-text-tertiary); font-size: 13px; }
