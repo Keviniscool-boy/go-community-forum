@@ -30,7 +30,7 @@ const (
 // ApiQuestionDetail 问题详情接口返回模型（问题 + 作者名 + 话题列表）
 type ApiQuestionDetail struct {
 	*Question
-	AuthorName string           `json:"author_name"`
+	AuthorName string           `json:"author_name" db:"author_name"`
 	Topics     []*TopicBrief    `json:"topics"`
 }
 

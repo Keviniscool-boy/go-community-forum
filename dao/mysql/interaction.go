@@ -508,6 +508,14 @@ func NotificationTypeFilter(s string) int32 {
 		return models.NotifyTypeCollect
 	case "dm":
 		return models.NotifyTypeDM
+	case "answer":
+		return models.NotifyTypeNewAnswer
+	case "invite":
+		return models.NotifyTypeAnswerInvite
+	case "invite_accepted":
+		return models.NotifyTypeInviteAccepted
+	case "invite_declined":
+		return models.NotifyTypeInviteDeclined
 	}
 	return 0
 }

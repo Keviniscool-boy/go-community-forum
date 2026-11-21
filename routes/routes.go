@@ -18,7 +18,11 @@ import (
 
 func Setup() *gin.Engine {
 	r := gin.New()
-	r.Use(middlewares.RequestIDMiddleware(), logger.GinLogger(), logger.GinRecovery(true), middlewares.RateLimitMiddleware(2*time.Second, 100)) // 请求追踪 + 限流
+	// 请求追踪 + 全局限流（桶参数可配置，默认 2s 补 1、容量 100）
+	r.Use(middlewares.RequestIDMiddleware(), logger.GinLogger(), logger.GinRecovery(true),
+		middlewares.RateLimitMiddleware(
+			time.Duration(viper.GetInt("app.rate_limit_fill_seconds"))*time.Second,
+			int64(viper.GetInt("app.rate_limit_capacity"))))
 
 	r.GET("/", func(c *gin.Context) {
 		c.String(http.StatusOK, "OK")

@@ -2,6 +2,9 @@ app:
   name: "bluebell"
   mode: "dev"
   port: 8081
+  # CI/容器环境放宽全局限流（e2e 连续 UI 流程会突发；生产建议默认 2s/100）
+  rate_limit_fill_seconds: 1
+  rate_limit_capacity: 1000
 mysql:
   auto_migrate: true  # 启动时自动执行 models/migrations 迁移链
   host: "mysql8019"
