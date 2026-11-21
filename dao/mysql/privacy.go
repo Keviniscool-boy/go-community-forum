@@ -97,14 +97,14 @@ type OutboxEvent struct {
 	Payload     string // 合法 JSON；不含私信正文、token、验证码
 }
 
-// PendingOutboxEvent 待处理事件
+// PendingOutboxEvent 待处理事件（db 标签使 sqlx 正确映射 snake_case 列）
 type PendingOutboxEvent struct {
-	ID        int64
-	EventID   int64
-	EventType string
-	AggregateID string
-	Payload   string
-	Attempts  int
+	ID          int64  `db:"id"`
+	EventID     int64  `db:"event_id"`
+	EventType   string `db:"event_type"`
+	AggregateID string `db:"aggregate_id"`
+	Payload     string `db:"payload"`
+	Attempts    int    `db:"attempts"`
 }
 
 // ListPendingOutbox 取待处理事件（到期，按尝试次数上限排除 dead）

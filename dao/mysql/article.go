@@ -261,9 +261,9 @@ func ListArticlesByAuthor(authorID int64, limit int) (articles []*models.Article
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
-	err = db.Select(&articles, `SELECT article_id, author_id, COALESCE(column_id, 0) AS column_id, title,
-		LEFT(content, 200) AS content, view_count, status, moderation_status, visibility,
-		deleted_at, update_time, create_time
+	err = db.Select(&articles, `SELECT a.article_id, a.author_id, COALESCE(a.column_id, 0) AS column_id,
+		a.title, LEFT(a.content, 200) AS content, a.view_count, a.status, a.moderation_status,
+		a.visibility, a.deleted_at, a.update_time, a.create_time
 		FROM article a JOIN user u ON u.user_id = a.author_id AND u.status = 1
 		WHERE a.author_id = ? AND a.status = 1 AND a.moderation_status = 1
 		AND a.visibility = 1 AND a.deleted_at IS NULL
