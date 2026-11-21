@@ -436,6 +436,43 @@ func txCreateNotification(tx *sqlx.Tx, userID, actorID int64, notifyType int32, 
 	return err
 }
 
+// notifyNewAnswerTx 新回答通知：提问者 + 问题关注者（排除回答者自己；txCreateNotification 自带自通知跳过）
+func notifyNewAnswerTx(tx *sqlx.Tx, questionID, answerAuthorID int64) error {
+	var qAuthor int64
+	if err := tx.Get(&qAuthor, "SELECT author_id FROM question WHERE question_id = ?", questionID); err != nil {
+		return err
+	}
+	if err := txCreateNotification(tx, qAuthor, answerAuthorID, models.NotifyTypeNewAnswer, models.TargetQuestion, questionID); err != nil {
+		return err
+	}
+	var followerIDs []int64
+	if err := tx.Select(&followerIDs, "SELECT user_id FROM question_follow WHERE question_id = ?", questionID); err != nil {
+		return err
+	}
+	for _, uid := range followerIDs {
+		if uid == answerAuthorID || uid == qAuthor {
+			continue
+		}
+		if err := txCreateNotification(tx, uid, answerAuthorID, models.NotifyTypeNewAnswer, models.TargetQuestion, questionID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// NotifyNewAnswer 独立事务版本（审核批准路径使用）
+func NotifyNewAnswer(questionID, answerAuthorID int64) error {
+	tx, err := db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = notifyNewAnswerTx(tx, questionID, answerAuthorID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // ListNotifications 按 cursor 分页查询用户通知（typeFilter 空串=全部）
 func ListNotifications(userID int64, cursorTime sql.NullTime, cursorID int64, limit int, typeFilter string) (ns []*models.Notification, err error) {
 	ns = make([]*models.Notification, 0, limit)

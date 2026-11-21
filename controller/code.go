@@ -55,6 +55,8 @@ const (
 	CodeAnswerNotAcceptable   ResCode = 1042
 	CodeQuestionClosedState   ResCode = 1043
 	CodeQuestionTransition    ResCode = 1044
+	CodeInvitationLimit       ResCode = 1045
+	CodeInvitationState       ResCode = 1046
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -101,6 +103,8 @@ var codeMsgMap = map[ResCode]string{
 	CodeAnswerNotAcceptable:   "该回答不可采纳",
 	CodeQuestionClosedState:   "问题已关闭，无法采纳回答",
 	CodeQuestionTransition:    "该状态转换不允许（solved 由采纳操作维护）",
+	CodeInvitationLimit:       "邀请数已达上限",
+	CodeInvitationState:       "邀请已处理或已失效",
 }
 
 // 创建一个函数，传入code返回msg

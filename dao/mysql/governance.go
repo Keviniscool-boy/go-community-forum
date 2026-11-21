@@ -97,6 +97,27 @@ func SetModeration(targetType int32, targetID int64, moderationStatus int32, ope
 	return err
 }
 
+// SetModerationIfChanged 条件审核：状态未变化时返回 changed=false（重复 approve 不再重复通知/重算）
+func SetModerationIfChanged(targetType int32, targetID int64, moderationStatus int32, operatorID int64) (bool, error) {
+	var query string
+	switch targetType {
+	case models.ReportTargetQuestion:
+		query = "UPDATE question SET moderation_status = ?, updated_by = ? WHERE question_id = ? AND moderation_status <> ?"
+	case models.ReportTargetAnswer:
+		query = "UPDATE answer SET moderation_status = ?, updated_by = ? WHERE answer_id = ? AND moderation_status <> ?"
+	case models.ReportTargetComment:
+		query = "UPDATE comment SET moderation_status = ?, updated_by = ? WHERE comment_id = ? AND moderation_status <> ?"
+	default:
+		return false, ErrInvalidParams
+	}
+	result, err := db.Exec(query, moderationStatus, operatorID, targetID, moderationStatus)
+	if err != nil {
+		return false, err
+	}
+	n, _ := result.RowsAffected()
+	return n > 0, nil
+}
+
 // SetVisibility 管理员设置可见性
 func SetVisibility(targetType int32, targetID int64, visibility int32, operatorID int64) error {
 	var query string

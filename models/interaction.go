@@ -24,13 +24,17 @@ func TargetTypeToCode(s string) int32 {
 
 // 通知类型
 const (
-	NotifyTypeLike     = 1 // 赞同
-	NotifyTypeComment  = 2 // 评论
-	NotifyTypeFollow   = 3 // 关注
-	NotifyTypeCollect  = 4 // 收藏
-	NotifyTypeDM       = 5 // 私信（outbox worker 投递）
-	NotifyTypeAccept   = 6 // 回答被采纳
-	NotifyTypeUnaccept = 7 // 采纳被撤销
+	NotifyTypeLike           = 1  // 赞同
+	NotifyTypeComment        = 2  // 评论
+	NotifyTypeFollow         = 3  // 关注
+	NotifyTypeCollect        = 4  // 收藏
+	NotifyTypeDM             = 5  // 私信（outbox worker 投递）
+	NotifyTypeAccept         = 6  // 回答被采纳
+	NotifyTypeUnaccept       = 7  // 采纳被撤销
+	NotifyTypeNewAnswer      = 8  // 问题有新回答（提问者/问题关注者）
+	NotifyTypeAnswerInvite   = 9  // 邀请你回答
+	NotifyTypeInviteAccepted = 10 // 邀请被接受
+	NotifyTypeInviteDeclined = 11 // 邀请被婉拒
 )
 
 // Comment 评论模型
@@ -80,9 +84,10 @@ type Notification struct {
 // ApiNotificationDetail 通知详情（含触发者用户名与摘要文案）
 type ApiNotificationDetail struct {
 	*Notification
-	ActorName string `json:"actor_name"`
-	Excerpt   string `json:"excerpt"`
-	AggCount  int    `json:"agg_count,omitempty"` // 同目标同类型聚合条数（仅展示层聚合，>1 时前端显示"某某等 N 人"）
+	ActorName  string `json:"actor_name"`
+	Excerpt    string `json:"excerpt"`
+	AggCount   int    `json:"agg_count,omitempty"` // 同目标同类型聚合条数（仅展示层聚合，>1 时前端显示"某某等 N 人"）
+	QuestionID string `json:"question_id,omitempty"` // 邀请类通知跳转用（type 9 的 target_id 为邀请 id）
 }
 
 // FeedAuthor Feed 条目的作者信息

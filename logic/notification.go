@@ -6,6 +6,8 @@ import (
 
 	"bluebell/dao/mysql"
 	"bluebell/models"
+
+	"github.com/jmoiron/sqlx"
 )
 
 // 通知相关
@@ -50,6 +52,10 @@ func ListNotifications(userID int64, cursor string, limit int, typeFilter string
 	for _, u := range users {
 		actorMap[u.UserID] = u
 	}
+	// 邀请/新回答类通知（8-11）：批量关联问题标题与跳转 question_id
+	// type 8 target=question；type 9 target=invitation（需解析 question_id）；type 10/11 target=question
+	qInfo := loadQuestionInfoForNotifications(ns)
+
 	// 展示层聚合（规格 10.1）：同批次内 type=赞同 且目标相同的通知合并为"某某等 N 人"，
 	// 不改变原始记录与审计事实；跨页不聚合
 	items := make([]*models.ApiNotificationDetail, 0, len(ns))
@@ -63,10 +69,25 @@ func ListNotifications(userID int64, cursor string, limit int, typeFilter string
 			}
 		}
 		last = n
+		excerpt := notifyText(n.Type)
 		detail := &models.ApiNotificationDetail{
 			Notification: n,
-			Excerpt:      notifyText(n.Type),
+			Excerpt:      excerpt,
 			AggCount:     1,
+		}
+		if info := qInfo[key64(int64(n.Type), n.TargetID)]; info != nil {
+			if info.Title != "" {
+				detail.Excerpt = excerpt + "：" + truncateRunes(info.Title, 50)
+			}
+			if info.QuestionID != 0 {
+				detail.QuestionID = strconv.FormatInt(info.QuestionID, 10)
+			}
+			if n.Type == models.NotifyTypeNewAnswer && n.UserID == info.AuthorID {
+				detail.Excerpt = "回答了你的问题"
+				if info.Title != "" {
+					detail.Excerpt = "回答了你的问题：" + truncateRunes(info.Title, 50)
+				}
+			}
 		}
 		if u := actorMap[n.ActorID]; u != nil {
 			detail.ActorName = u.Username
@@ -99,6 +120,14 @@ func notifyText(t int32) string {
 		return "采纳了你的回答"
 	case models.NotifyTypeUnaccept:
 		return "撤销了对你回答的采纳"
+	case models.NotifyTypeNewAnswer:
+		return "回答了你的问题" // 关注者场景由详情构造改为"回答了你关注的问题"
+	case models.NotifyTypeAnswerInvite:
+		return "邀请你回答"
+	case models.NotifyTypeInviteAccepted:
+		return "接受了你的回答邀请"
+	case models.NotifyTypeInviteDeclined:
+		return "婉拒了你的回答邀请"
 	}
 	return "与你互动"
 }
@@ -211,4 +240,79 @@ func ListUserColumns(userID int64, limit int) (columns []*models.Column, err err
 		columns = columns[:limit]
 	}
 	return columns, nil
+}
+
+// notifQuestionInfo 通知关联的问题信息
+type notifQuestionInfo struct {
+	Title     string
+	AuthorID  int64
+	QuestionID int64 // type 9 经邀请解析出的问题 id
+}
+
+func key64(a, b int64) string {
+	return strconv.FormatInt(a, 10) + ":" + strconv.FormatInt(b, 10)
+}
+
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
+}
+
+// loadQuestionInfoForNotifications 批量解析 8-11 类通知关联的问题（标题/作者/跳转 id）
+func loadQuestionInfoForNotifications(ns []*models.Notification) map[string]*notifQuestionInfo {
+	out := make(map[string]*notifQuestionInfo)
+	var questionIDs, invitationIDs []int64
+	seenQ, seenI := make(map[int64]struct{}), make(map[int64]struct{})
+	for _, n := range ns {
+		switch n.Type {
+		case models.NotifyTypeNewAnswer, models.NotifyTypeInviteAccepted, models.NotifyTypeInviteDeclined:
+			if _, ok := seenQ[n.TargetID]; !ok {
+				seenQ[n.TargetID] = struct{}{}
+				questionIDs = append(questionIDs, n.TargetID)
+			}
+		case models.NotifyTypeAnswerInvite:
+			if _, ok := seenI[n.TargetID]; !ok {
+				seenI[n.TargetID] = struct{}{}
+				invitationIDs = append(invitationIDs, n.TargetID)
+			}
+		}
+	}
+	if len(questionIDs) > 0 {
+		rows := make([]struct {
+			QuestionID int64  `db:"question_id"`
+			Title      string `db:"title"`
+			AuthorID   int64  `db:"author_id"`
+		}, 0)
+		query, args, err := sqlx.In("SELECT question_id, title, author_id FROM question WHERE question_id IN (?)", questionIDs)
+		if err == nil {
+			if err = mysql.GetGlobalDB().Select(&rows, query, args...); err == nil {
+				for _, r := range rows {
+					out[key64(models.NotifyTypeNewAnswer, r.QuestionID)] = &notifQuestionInfo{Title: r.Title, AuthorID: r.AuthorID, QuestionID: r.QuestionID}
+					out[key64(models.NotifyTypeInviteAccepted, r.QuestionID)] = &notifQuestionInfo{Title: r.Title, AuthorID: r.AuthorID, QuestionID: r.QuestionID}
+					out[key64(models.NotifyTypeInviteDeclined, r.QuestionID)] = &notifQuestionInfo{Title: r.Title, AuthorID: r.AuthorID, QuestionID: r.QuestionID}
+				}
+			}
+		}
+	}
+	if len(invitationIDs) > 0 {
+		rows := make([]struct {
+			InvitationID int64  `db:"invitation_id"`
+			QuestionID   int64  `db:"question_id"`
+			Title        string `db:"title"`
+		}, 0)
+		query, args, err := sqlx.In(`SELECT inv.invitation_id, inv.question_id, qu.title
+			FROM question_answer_invitation inv JOIN question qu ON qu.question_id = inv.question_id
+			WHERE inv.invitation_id IN (?)`, invitationIDs)
+		if err == nil {
+			if err = mysql.GetGlobalDB().Select(&rows, query, args...); err == nil {
+				for _, r := range rows {
+					out[key64(models.NotifyTypeAnswerInvite, r.InvitationID)] = &notifQuestionInfo{Title: r.Title, QuestionID: r.QuestionID}
+				}
+			}
+		}
+	}
+	return out
 }

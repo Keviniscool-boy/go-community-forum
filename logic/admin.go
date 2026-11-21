@@ -145,12 +145,33 @@ func ModerateContent(actorID int64, targetType, action, targetID, requestID stri
 	if err != nil {
 		return ErrCommentInvalid
 	}
-	if err := mysql.SetModeration(tt, id, code, actorID); err != nil {
+	changed, err := mysql.SetModerationIfChanged(tt, id, code, actorID)
+	if err != nil {
 		return err
 	}
-	// 回答被下架/隔离后不再满足"公开可采纳"条件：自动清空采纳并恢复问题 open（PRD §4.2）
+	if !changed {
+		// 状态未变化：幂等返回，不重复通知/重算/失效
+		metadata, _ := json.Marshal(map[string]string{"action": action})
+		logAdminAction(actorID, "content_moderate", targetType, targetID, requestID, string(metadata))
+		return nil
+	}
 	if tt == models.ReportTargetAnswer {
-		if action != "approve" {
+		if action == "approve" {
+			// 回答进入公开：新回答通知（提问者/关注者）+ 被邀请者邀请完成（PRD §8.3）
+			qid, answerAuthor, qerr := mysql.GetAnswerQuestionAndAuthor(id)
+			if qerr != nil {
+				zap.L().Error("load answer for approve hook failed", zap.Int64("answer_id", id), zap.Error(qerr))
+			}
+			if qerr == nil {
+				if nerr := mysql.NotifyNewAnswer(qid, answerAuthor); nerr != nil {
+					zap.L().Error("notify new answer after approve failed", zap.Int64("answer_id", id), zap.Error(nerr))
+				}
+				if ierr := mysql.MarkInvitationAnswered(qid, answerAuthor); ierr != nil {
+					zap.L().Error("mark invitation answered failed", zap.Int64("answer_id", id), zap.Error(ierr))
+				}
+			}
+		} else {
+			// 回答被下架/隔离：不再满足公开可采纳条件，自动清空采纳（PRD §4.2）
 			if _, err := mysql.ClearAcceptanceByAnswer(id, "moderation_"+action, requestID, actorID); err != nil {
 				zap.L().Error("clear acceptance after moderation failed",
 					zap.Int64("answer_id", id), zap.Error(err))
@@ -160,6 +181,13 @@ func ModerateContent(actorID int64, targetType, action, targetID, requestID stri
 		if err := mysql.RecountAnswerCountByAnswer(id); err != nil {
 			zap.L().Error("recount answer_count after moderation failed",
 				zap.Int64("answer_id", id), zap.Error(err))
+		}
+	}
+	if tt == models.ReportTargetQuestion && action != "approve" {
+		// 问题下架/隔离：待处理邀请失效（PRD §3）
+		if err := mysql.ExpireQuestionInvitations(id); err != nil {
+			zap.L().Error("expire invitations after question moderation failed",
+				zap.Int64("question_id", id), zap.Error(err))
 		}
 	}
 	metadata, _ := json.Marshal(map[string]string{"action": action})
@@ -184,6 +212,11 @@ func SetUserEnabled(actorID int64, targetUserID int64, enable bool, requestID st
 		// 作者禁用 → 其回答不再满足公开可采纳条件，自动清空相关采纳并恢复问题 open（PRD §4.2）
 		if _, err := mysql.ClearAcceptancesForAuthor(targetUserID, requestID, actorID); err != nil {
 			zap.L().Error("clear acceptances after user disable failed",
+				zap.Int64("user_id", targetUserID), zap.Error(err))
+		}
+		// 用户禁用 → 其作为邀请者/接收者的待处理邀请失效（PRD §3）
+		if err := mysql.ExpireUserInvitations(targetUserID); err != nil {
+			zap.L().Error("expire invitations after user disable failed",
 				zap.Int64("user_id", targetUserID), zap.Error(err))
 		}
 	}

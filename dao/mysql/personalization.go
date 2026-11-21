@@ -193,8 +193,22 @@ func BlockUser(blockerID, blockedID int64) error {
 	if blockerID == blockedID {
 		return ErrCannotBlockSelf
 	}
-	_, err := db.Exec("INSERT IGNORE INTO user_block (blocker_id, blocked_id) VALUES (?, ?)", blockerID, blockedID)
-	return err
+	tx, err := db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec("INSERT IGNORE INTO user_block (blocker_id, blocked_id) VALUES (?, ?)", blockerID, blockedID); err != nil {
+		return err
+	}
+	// 双方建立屏蔽：两人之间的待处理回答邀请立即失效（PRD §9，同事务）
+	if _, err = tx.Exec(
+		"UPDATE question_answer_invitation SET status = 5 WHERE status = 0 AND "+
+			"((inviter_id = ? AND invitee_id = ?) OR (inviter_id = ? AND invitee_id = ?))",
+		blockerID, blockedID, blockedID, blockerID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // UnblockUser 取消屏蔽

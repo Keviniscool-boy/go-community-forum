@@ -47,9 +47,21 @@ func Setup() *gin.Engine {
 
 	// 问答相关路由
 	v1.POST("/questions", middlewares.JWTAuthMiddleware(), controller.CreateQuestionHandler)
+	// 待回答问题列表（静态路由，注册在 /questions/:id 之前，PRD §6.1）
+	v1.GET("/questions/unanswered", middlewares.OptionalAuthMiddleware(), controller.ListUnansweredQuestionsHandler)
 	v1.GET("/questions/:id", middlewares.OptionalAuthMiddleware(), controller.GetQuestionDetailHandler)
 	v1.POST("/questions/:id/answers", middlewares.JWTAuthMiddleware(), controller.CreateAnswerHandler)
 	v1.GET("/questions/:id/answers", controller.ListAnswersHandler)
+
+	// 回答邀请（待回答问题发现与回答邀请 PRD §7）
+	v1.GET("/questions/:id/invitation-candidates", middlewares.JWTAuthMiddleware(), controller.ListInviteCandidatesHandler)
+	v1.POST("/questions/:id/answer-invitations", middlewares.JWTAuthMiddleware(), controller.SendAnswerInvitationsHandler)
+	v1.GET("/questions/:id/answer-invitations", middlewares.JWTAuthMiddleware(), controller.ListQuestionInvitationsHandler)
+	v1.GET("/me/answer-invitations", middlewares.JWTAuthMiddleware(), controller.ListMyAnswerInvitationsHandler)
+	v1.GET("/me/answer-invitation-preference", middlewares.JWTAuthMiddleware(), controller.GetAnswerInvitationPreferenceHandler)
+	v1.PUT("/me/answer-invitation-preference", middlewares.JWTAuthMiddleware(), controller.SetAnswerInvitationPreferenceHandler)
+	v1.POST("/answer-invitations/:id/accept", middlewares.JWTAuthMiddleware(), controller.AcceptAnswerInvitationHandler)
+	v1.POST("/answer-invitations/:id/decline", middlewares.JWTAuthMiddleware(), controller.DeclineAnswerInvitationHandler)
 
 	// Feed 相关路由（following 需登录，其余公开）
 	v1.GET("/feed/:type", middlewares.OptionalAuthMiddleware(), controller.GetFeedHandler)

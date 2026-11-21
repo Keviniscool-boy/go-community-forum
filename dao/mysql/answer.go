@@ -29,6 +29,15 @@ func CreateAnswer(a *models.Answer, moderationStatus int32) error {
 		"UPDATE question SET answer_count = answer_count + 1 WHERE question_id = ?", a.QuestionID); err != nil {
 		return err
 	}
+	// 公开回答落地：通知提问者/问题关注者（type 8）+ 被邀请者邀请完成（PRD §4.1/§8.3，同事务）
+	if moderationStatus == 1 {
+		if err = notifyNewAnswerTx(tx, a.QuestionID, a.AuthorID); err != nil {
+			return err
+		}
+		if err = MarkInvitationAnsweredTx(tx, a.QuestionID, a.AuthorID); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
@@ -137,6 +146,18 @@ func ListAnswersByQuestion(p *AnswerPageParams) (answers []*models.Answer, err e
 		}
 	}
 	return answers, nil
+}
+
+// GetAnswerQuestionAndAuthor 查回答所属问题与作者（审核批准后的联动钩子用）
+func GetAnswerQuestionAndAuthor(answerID int64) (questionID, authorID int64, err error) {
+	var row struct {
+		QuestionID int64 `db:"question_id"`
+		AuthorID   int64 `db:"author_id"`
+	}
+	if err = db.Get(&row, "SELECT question_id, author_id FROM answer WHERE answer_id = ?", answerID); err != nil {
+		return 0, 0, err
+	}
+	return row.QuestionID, row.AuthorID, nil
 }
 
 // RecountAnswerCountByAnswer 按回答 id 重算所属问题的公开回答数（派生计数对账用）

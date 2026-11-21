@@ -128,12 +128,24 @@ func UpdateQuestion(questionID, authorID int64, title, description string) (bool
 
 // SoftDeleteQuestion 作者软删除问题（status=0；Feed 通过 JOIN qu.status=1 自动隐藏其回答）
 func SoftDeleteQuestion(questionID, authorID int64) (bool, error) {
-	result, err := db.Exec(
+	tx, err := db.Beginx()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(
 		"UPDATE question SET status = 0 WHERE question_id = ? AND author_id = ? AND status = 1",
 		questionID, authorID)
 	if err != nil {
 		return false, err
 	}
 	n, _ := result.RowsAffected()
-	return n > 0, nil
+	if n == 0 {
+		return false, nil
+	}
+	// 问题删除：待处理邀请失效（PRD §3，同事务）
+	if err = ExpireQuestionInvitationsTx(tx, questionID); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
 }

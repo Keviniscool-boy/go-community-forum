@@ -85,6 +85,11 @@ func LatestMigrationVersion(ctx context.Context) (int, error) {
 }
 
 // SetGlobalDB 测试与运维工具用：替换全局数据库连接（导出别名，复用 setGlobalDB）
+// GetGlobalDB 返回全局连接（只读批查场景使用；写路径一律走 DAO 函数）
+func GetGlobalDB() *sqlx.DB {
+	return db
+}
+
 func SetGlobalDB(d *sqlx.DB) {
 	setGlobalDB(d)
 }

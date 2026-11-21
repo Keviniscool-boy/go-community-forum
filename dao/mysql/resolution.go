@@ -114,6 +114,10 @@ func AcceptAnswerAtomic(questionID, answerID, actorID int64, requestID string) e
 	if n, _ := result.RowsAffected(); n == 0 {
 		return ErrResolutionConflict
 	}
+	// 问题已解决：待处理邀请失效（PRD §3 关闭或解决不允许新邀请）
+	if err = ExpireQuestionInvitationsTx(tx, questionID); err != nil {
+		return err
+	}
 	// 通知回答作者（同事务；自己采纳自己的回答不通知）
 	if err = txCreateNotification(tx, answerAuthor, actorID, models.NotifyTypeAccept, models.TargetQuestion, questionID); err != nil {
 		return err
@@ -209,6 +213,12 @@ func SetQuestionResolutionStatusAtomic(questionID, actorID int64, from, to int32
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
 		return ErrResolutionConflict
+	}
+	// 关闭/解决后不允许新邀请：待处理邀请失效（PRD §3）
+	if to == models.QuestionResolutionClosed {
+		if err = ExpireQuestionInvitationsTx(tx, questionID); err != nil {
+			return err
+		}
 	}
 	action := "question_close"
 	if to == models.QuestionResolutionOpen {

@@ -259,6 +259,11 @@ func BlockUserHandler(c *gin.Context) {
 		ResponseError(c, CodeServerBusy)
 		return
 	}
+	// 双方建立屏蔽：两人之间的待处理回答邀请立即失效（PRD §9）
+	if err := mysql.ExpireInvitationsBetween(userID, targetID); err != nil {
+		zap.L().Error("expire invitations after block failed",
+			zap.Int64("blocker", userID), zap.Int64("blocked", targetID), zap.Error(err))
+	}
 	ResponseSuccess(c, gin.H{"blocked": true})
 }
 
