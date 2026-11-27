@@ -50,6 +50,17 @@ func ListNotifications(userID int64, cursor string, limit int) (*models.PageResu
 	for _, u := range users {
 		actorMap[u.UserID] = u
 	}
+	// 回答类通知的 target_id 是回答 ID，补查所属问题 ID 供前端跳转（批量，避免 N+1）
+	answerIDs := make([]int64, 0, len(ns))
+	for _, n := range ns {
+		if n.TargetType == models.TargetAnswer {
+			answerIDs = append(answerIDs, n.TargetID)
+		}
+	}
+	questionIDs, err := mysql.AnswerQuestionIDs(answerIDs)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]*models.ApiNotificationDetail, 0, len(ns))
 	var last *models.Notification
 	for _, n := range ns {
@@ -60,6 +71,9 @@ func ListNotifications(userID int64, cursor string, limit int) (*models.PageResu
 		}
 		if u := actorMap[n.ActorID]; u != nil {
 			detail.ActorName = u.Username
+		}
+		if qid, ok := questionIDs[n.TargetID]; ok {
+			detail.QuestionID = strconv.FormatInt(qid, 10)
 		}
 		items = append(items, detail)
 	}
@@ -85,6 +99,10 @@ func notifyText(t int32) string {
 		return "关注了你"
 	case models.NotifyTypeCollect:
 		return "收藏了你的回答"
+	case models.NotifyTypeCommentLike:
+		return "赞同了你的评论"
+	case models.NotifyTypeReply:
+		return "回复了你的评论"
 	}
 	return "与你互动"
 }

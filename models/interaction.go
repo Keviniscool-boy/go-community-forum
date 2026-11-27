@@ -1,12 +1,19 @@
 package models
 
-import "time"
+import (
+	"database/sql"
+	"time"
+)
 
 // 评论目标类型（存储用 tinyint，JSON 交互用字符串）
 const (
-	TargetAnswer  = 1
+	TargetAnswer   = 1
 	TargetQuestion = 2
 )
+
+func IsPrivilegedRole(role string) bool {
+	return role == RoleModerator || role == RoleAdmin
+}
 
 // TargetTypeToCode 字符串目标类型转存储编码，非法返回 0
 func TargetTypeToCode(s string) int32 {
@@ -25,25 +32,37 @@ const (
 	NotifyTypeComment = 2 // 评论
 	NotifyTypeFollow  = 3 // 关注
 	NotifyTypeCollect = 4 // 收藏
+	// 第四阶段：评论体系补全（追加在末尾，不改动已发布类型编号）
+	NotifyTypeCommentLike = 5 // 赞同了你的评论
+	NotifyTypeReply       = 6 // 回复了你的评论
 )
 
 // Comment 评论模型
 type Comment struct {
-	CommentID  int64     `json:"id,string" db:"comment_id"`
-	UserID     int64     `json:"user_id,string" db:"user_id"`
-	TargetType int32     `json:"target_type" db:"target_type"`
-	TargetID   int64     `json:"target_id,string" db:"target_id"`
-	ParentID   int64     `json:"parent_id,string" db:"parent_id"`
-	Content    string    `json:"content" db:"content"`
-	Status     int32     `json:"status" db:"status"`
-	CreateTime time.Time `json:"create_time" db:"create_time"`
+	CommentID        int64        `json:"id,string" db:"comment_id"`
+	UserID           int64        `json:"user_id,string" db:"user_id"`
+	TargetType       int32        `json:"target_type" db:"target_type"`
+	TargetID         int64        `json:"target_id,string" db:"target_id"`
+	ParentID         int64        `json:"parent_id,string" db:"parent_id"`
+	ReplyToUserID    int64        `json:"-" db:"reply_to_user_id"` // 被回复的回复的作者（0 = 直接回复一级评论）
+	Content          string       `json:"content" db:"content"`
+	Status           int32        `json:"status" db:"status"`
+	ModerationStatus int32        `json:"-" db:"moderation_status"`
+	DeletedAt        sql.NullTime `json:"-" db:"deleted_at"`
+	CreateTime       time.Time    `json:"create_time" db:"create_time"`
 }
 
 // ApiCommentDetail 评论详情（含评论者信息）
 type ApiCommentDetail struct {
 	*Comment
-	Username  string `json:"username"`
-	AvatarURL string `json:"avatar_url"`
+	Username    string `json:"username"`
+	AvatarURL   string `json:"avatar_url"`
+	ReplyToUser string `json:"reply_to_user,omitempty"` // 被回复的回复的作者（「回复 @xxx」）
+	LikeCount   int32  `json:"like_count"`
+	ReplyCount  int32  `json:"reply_count"` // 直接回复数（仅一级评论有效）
+	Liked       bool   `json:"liked"`       // 当前用户是否已点赞
+	CanDelete   bool   `json:"can_delete"`  // 当前用户是否可删除（作者或管理员/审核员）
+	IsDeleted   bool   `json:"is_deleted"`  // 已删除但保留占位（下方仍有可见回复）
 }
 
 // ParamCreateComment 创建评论请求
@@ -76,6 +95,8 @@ type ApiNotificationDetail struct {
 	*Notification
 	ActorName string `json:"actor_name"`
 	Excerpt   string `json:"excerpt"`
+	// 目标为回答时的所属问题 ID：通知跳转用（回答通知的 target_id 是回答 ID，不能直接拼问题地址）
+	QuestionID string `json:"question_id,omitempty"`
 }
 
 // FeedAuthor Feed 条目的作者信息
@@ -95,15 +116,15 @@ type FeedStats struct {
 
 // FeedItem Feed 流条目（问题或回答）
 type FeedItem struct {
-	ItemType   string     `json:"item_type"` // question | answer
-	ItemID     string     `json:"item_id"`   // 已是字符串，不加 ,string（避免双重引号）
-	QuestionID string     `json:"question_id,omitempty"`
-	Title      string     `json:"title"`
-	Excerpt    string     `json:"excerpt"`
-	Author     FeedAuthor `json:"author"`
+	ItemType   string      `json:"item_type"` // question | answer
+	ItemID     string      `json:"item_id"`   // 已是字符串，不加 ,string（避免双重引号）
+	QuestionID string      `json:"question_id,omitempty"`
+	Title      string      `json:"title"`
+	Excerpt    string      `json:"excerpt"`
+	Author     FeedAuthor  `json:"author"`
 	Topic      *TopicBrief `json:"topic,omitempty"`
-	Stats      FeedStats  `json:"stats"`
-	CreateTime time.Time  `json:"create_time"`
+	Stats      FeedStats   `json:"stats"`
+	CreateTime time.Time   `json:"create_time"`
 }
 
 // ---------- Swagger 文档用具体分页类型（swag CLI 对泛型解析有限制） ----------

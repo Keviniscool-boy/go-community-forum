@@ -30,15 +30,24 @@ async function onReadAll() {
   }
 }
 
-// 通知跳转：关注类跳用户主页，其余按目标类型跳转
-function targetLink(n: { type: number; target_type: number; target_id: string; actor_id: string }): string {
-  if (n.type === 3) return `/users/${n.target_id || n.actor_id}`
-  if (n.target_type === 1) return `/questions/${n.target_id}`
-  return `/questions/${n.target_id}`
+// 通知跳转：关注类跳用户主页；问题类跳问题页；回答类跳所属问题并定位到该回答（#answer-<id>）
+// 注意 target_type 1 是回答、2 是问题；回答通知的 target_id 是回答 ID，必须用 question_id 拼地址
+function targetLink(n: {
+  type: number
+  target_type: number
+  target_id: string
+  actor_id: string
+  question_id?: string
+}): string {
+  if (n.type === 3) return `/users/${n.actor_id}`
+  if (n.target_type === 2) return `/questions/${n.target_id}`
+  if (n.question_id) return `/questions/${n.question_id}#answer-${n.target_id}`
+  return '/'
 }
 
+// 1 赞同 2 评论 3 关注 4 收藏 5 赞同评论 6 回复评论
 const typeIcon = (t: number) =>
-  ({ 1: '👍', 2: '💬', 3: '➕', 4: '⭐' })[t] || '🔔'
+  ({ 1: '👍', 2: '💬', 3: '➕', 4: '⭐', 5: '👍', 6: '💬' })[t] || '🔔'
 </script>
 
 <template>

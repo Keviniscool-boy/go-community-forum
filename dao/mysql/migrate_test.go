@@ -97,7 +97,7 @@ func TestMigrationsFreshDB(t *testing.T) {
 	}
 	for _, table := range []string{"user", "community", "post", "topic", "question", "answer",
 		"question_topic", "user_follow", "topic_follow", "question_follow",
-		"answer_vote", "answer_collect", "comment", "notification", "schema_migrations"} {
+		"answer_vote", "answer_collect", "comment", "comment_like", "notification", "schema_migrations"} {
 		var n int
 		if err := db.Get(&n, `SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
 			WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`, table); err != nil || n != 1 {
@@ -105,13 +105,13 @@ func TestMigrationsFreshDB(t *testing.T) {
 		}
 	}
 
-	// 版本记录 000-007（新增迁移后同步更新数量断言）
+	// 版本记录 000-008（新增迁移后同步更新数量断言）
 	var versions []int
 	if err := db.Select(&versions, "SELECT version FROM schema_migrations ORDER BY version"); err != nil {
 		t.Fatal(err)
 	}
-	if len(versions) != 8 {
-		t.Fatalf("expected 8 migrations recorded, got %v", versions)
+	if len(versions) != 9 {
+		t.Fatalf("expected 9 migrations recorded, got %v", versions)
 	}
 
 	// 基线社区种子存在
@@ -199,6 +199,66 @@ func TestMigrationsComposeBaselineDB(t *testing.T) {
 	mustQueryRow(t, db, "SELECT COUNT(*) FROM user WHERE username = 'carol'", &n)
 	if n != 1 {
 		t.Fatal("existing user lost during upgrade")
+	}
+}
+
+// TestMigrationsCommentEnhanceUpgrade 旧库（已有评论）升级到 008：reply_count 按存量回复关系回填，点赞从 0 起算
+func TestMigrationsCommentEnhanceUpgrade(t *testing.T) {
+	root := requireMySQL(t)
+	switchToTempDB(t, createTempDB(t, root, "comment_upgrade"))
+
+	// 先升级到 007（评论增强之前的状态），写入存量评论：一级评论 1 下挂回复 2、3，另有已删除回复 4 与已禁用回复 5
+	if err := ensureMigrationTable(); err != nil {
+		t.Fatal(err)
+	}
+	files, err := listMigrationFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if f.Version > 7 {
+			break
+		}
+		if err := applyMigration(f); err != nil {
+			t.Fatalf("apply %03d: %v", f.Version, err)
+		}
+	}
+	mustExec(t, "INSERT INTO comment (comment_id, user_id, target_type, target_id, parent_id, content) VALUES "+
+		"(1, 1, 1, 10, 0, 'top'), (2, 2, 1, 10, 1, 'r1'), (3, 3, 1, 10, 1, 'r2'), (6, 4, 1, 10, 2, 'nested')")
+	mustExec(t, "INSERT INTO comment (comment_id, user_id, target_type, target_id, parent_id, content, deleted_at) VALUES "+
+		"(4, 2, 1, 10, 1, 'deleted', NOW())")
+	mustExec(t, "INSERT INTO comment (comment_id, user_id, target_type, target_id, parent_id, content, status) VALUES "+
+		"(5, 2, 1, 10, 1, 'disabled', 0)")
+
+	if err := RunMigrations(); err != nil {
+		t.Fatalf("upgrade to 008: %v", err)
+	}
+	if n := queryCount(t, "SELECT reply_count FROM comment WHERE comment_id = 1"); n != 3 {
+		t.Fatalf("reply_count backfill = %d, want 3 (two replies + one flattened, only visible)", n)
+	}
+	// 深层回复上提到一级评论下，并记录被回复人
+	var parentID, replyTo int64
+	mustQueryRow(t, db, "SELECT parent_id, reply_to_user_id FROM comment WHERE comment_id = 6", &parentID, &replyTo)
+	if parentID != 1 || replyTo != 2 {
+		t.Fatalf("nested reply should be flattened under 1 replying to user 2, got parent=%d reply_to=%d", parentID, replyTo)
+	}
+	if n := queryCount(t, "SELECT like_count FROM comment WHERE comment_id = 1"); n != 0 {
+		t.Fatalf("like_count should start at 0, got %d", n)
+	}
+	if n := queryCount(t, "SELECT COUNT(*) FROM comment WHERE reply_count <> 0"); n != 1 {
+		t.Fatalf("only the top-level comment should have reply_count, got %d rows", n)
+	}
+	if !columnExists(t, db, "comment", "like_count") {
+		t.Fatal("comment.like_count missing after upgrade")
+	}
+	// 评论可见性列表在升级后的结构上可正常执行
+	rows, err := ListComments(&CommentPageParams{TargetType: 1, TargetID: 10, Limit: 20})
+	if err != nil {
+		t.Fatalf("list comments after upgrade: %v", err)
+	}
+	// 作者表为空（未建用户）：无活跃作者的评论不返回，但查询本身不应报错
+	if len(rows) != 0 {
+		t.Fatalf("comments without active author must be hidden, got %d", len(rows))
 	}
 }
 

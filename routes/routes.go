@@ -10,9 +10,9 @@ import (
 	"bluebell/models"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/viper"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	"github.com/spf13/viper"
 	"time"
 )
 
@@ -73,7 +73,13 @@ func Setup() *gin.Engine {
 
 	// 评论相关路由
 	v1.POST("/comments", middlewares.JWTAuthMiddleware(), controller.CreateCommentHandler)
-	v1.GET("/comments", controller.ListCommentsHandler)
+	// 评论：列表与回复均「可选登录」——登录后返回点赞状态与删除权限，游客照常可读
+	v1.GET("/comments", middlewares.OptionalAuthMiddleware(), controller.ListCommentsHandler)
+	// 评论体系补全：楼中楼回复、点赞、删除（回复列表可选登录，用于返回点赞状态与删除权限）
+	v1.GET("/comments/:id/replies", middlewares.OptionalAuthMiddleware(), controller.ListCommentRepliesHandler)
+	v1.POST("/comments/:id/like", middlewares.JWTAuthMiddleware(), controller.LikeCommentHandler)
+	v1.DELETE("/comments/:id/like", middlewares.JWTAuthMiddleware(), controller.UnlikeCommentHandler)
+	v1.DELETE("/comments/:id", middlewares.JWTAuthMiddleware(), controller.DeleteCommentHandler)
 
 	// 通知相关路由
 	v1.GET("/notifications", middlewares.JWTAuthMiddleware(), controller.ListNotificationsHandler)

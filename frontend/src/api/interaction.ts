@@ -39,7 +39,7 @@ export function fetchQuestionInteractions(questionId: string) {
   return http.get<{ followed: boolean }>(`questions/${questionId}/interactions`)
 }
 
-// 评论
+// 评论（两级结构：parent_id = '0' 为一级评论，其余为挂在一级评论下的回复）
 export interface CommentDetail {
   id: string
   user_id: string
@@ -48,6 +48,12 @@ export interface CommentDetail {
   parent_id: string
   content: string
   create_time: string
+  like_count: number
+  reply_count: number // 直接回复数（仅一级评论有效）
+  liked: boolean // 当前用户是否已点赞
+  can_delete: boolean // 当前用户是否可删除（作者或管理员/审核员）
+  is_deleted: boolean // 已删除但保留占位（下方仍有可见回复）
+  reply_to_user?: string // 回复另一条回复时的被回复人（「回复 @xxx」）
 }
 
 export function fetchComments(targetType: 'answer' | 'question', targetId: string, cursor = '', limit = 20) {
@@ -56,6 +62,14 @@ export function fetchComments(targetType: 'answer' | 'question', targetId: strin
   })
 }
 
+// 某条一级评论下的回复（最早在前）
+export function fetchCommentReplies(commentId: string, cursor = '', limit = 20) {
+  return http.get<import('./feed').PageResult<CommentDetail>>(`comments/${commentId}/replies`, {
+    params: { cursor, limit },
+  })
+}
+
+// parentId：被回复的评论 ID（可以是一级评论，也可以是其下的一条回复）
 export function createComment(targetType: 'answer' | 'question', targetId: string, content: string, parentId?: string) {
   return http.post<{ comment_id: string }>('comments', {
     target_type: targetType,
@@ -63,4 +77,17 @@ export function createComment(targetType: 'answer' | 'question', targetId: strin
     parent_id: parentId,
     content,
   })
+}
+
+export function likeComment(commentId: string) {
+  return http.post<null>(`comments/${commentId}/like`)
+}
+
+export function unlikeComment(commentId: string) {
+  return http.delete<null>(`comments/${commentId}/like`)
+}
+
+// 删除评论（软删除，仅作者或管理员/审核员；其下回复保留）
+export function deleteComment(commentId: string) {
+  return http.delete<null>(`comments/${commentId}`)
 }

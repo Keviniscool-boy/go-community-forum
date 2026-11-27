@@ -1,13 +1,9 @@
 package logic
 
 import (
-	"database/sql"
 	"errors"
-	"strconv"
 
 	"bluebell/dao/mysql"
-	"bluebell/models"
-	"bluebell/pkg/snowflake"
 )
 
 // 互动相关业务错误
@@ -87,129 +83,4 @@ func IsQuestionFollowed(userID, questionID int64) (bool, error) {
 		return false, nil
 	}
 	return mysql.IsQuestionFollowed(userID, questionID)
-}
-
-// ---------- 评论 ----------
-
-// CreateComment 发表评论（评论、计数、通知在同一事务）
-func CreateComment(p *models.ParamCreateComment, userID int64) (commentID int64, err error) {
-	targetType := models.TargetTypeToCode(p.TargetType)
-	if targetType == 0 {
-		return 0, ErrCommentInvalid
-	}
-	targetID, err := strconv.ParseInt(p.TargetID, 10, 64)
-	if err != nil || targetID <= 0 {
-		return 0, ErrCommentInvalid
-	}
-	var parentID int64
-	if p.ParentID != "" {
-		parentID, err = strconv.ParseInt(p.ParentID, 10, 64)
-		if err != nil || parentID <= 0 {
-			return 0, ErrCommentInvalid
-		}
-		// 父评论必须存在且属于同一目标
-		parent, err := mysql.GetCommentByID(parentID)
-		if err != nil {
-			return 0, ErrCommentInvalid
-		}
-		if parent.TargetType != targetType || parent.TargetID != targetID {
-			return 0, ErrCommentInvalid
-		}
-	}
-	cm := &models.Comment{
-		CommentID:  snowflake.GenerateID(),
-		UserID:     userID,
-		TargetType: targetType,
-		TargetID:   targetID,
-		ParentID:   parentID,
-		Content:    p.Content,
-	}
-	// 目标不存在时 dao 层事务内返回 ErrAnswerNotExist / ErrQuestionNotExist
-	if err = mysql.CreateComment(cm); err != nil {
-		switch {
-		case errors.Is(err, mysql.ErrAnswerNotExist):
-			return 0, ErrAnswerNotExist
-		case errors.Is(err, mysql.ErrQuestionNotExist):
-			return 0, ErrQuestionNotExist
-		default:
-			return 0, err
-		}
-	}
-	return cm.CommentID, nil
-}
-
-// ListComments 评论列表（cursor 分页）
-func ListComments(targetTypeStr, targetIDStr, cursor string, limit int) (*models.PageResult[*models.ApiCommentDetail], error) {
-	if limit <= 0 {
-		limit = 20
-	}
-	if limit > 50 {
-		limit = 50
-	}
-	targetType := models.TargetTypeToCode(targetTypeStr)
-	if targetType == 0 {
-		return nil, ErrCommentInvalid
-	}
-	targetID, err := strconv.ParseInt(targetIDStr, 10, 64)
-	if err != nil || targetID <= 0 {
-		return nil, ErrCommentInvalid
-	}
-	var cursorTime sql.NullTime
-	var cursorID int64
-	if cursor != "" {
-		c, err := parseTimeCursor(cursor)
-		if err != nil {
-			return nil, ErrCursorInvalid
-		}
-		cursorTime.Time = c.Time
-		cursorID = c.ID
-	}
-	comments, err := mysql.ListComments(&mysql.CommentPageParams{
-		TargetType: targetType,
-		TargetID:   targetID,
-		CursorTime: cursorTime,
-		CursorID:   cursorID,
-		Limit:      limit,
-	})
-	if err != nil {
-		return nil, err
-	}
-	hasMore := false
-	if len(comments) > limit {
-		hasMore = true
-		comments = comments[:limit]
-	}
-	// 批量查评论者
-	userIDs := make([]int64, 0, len(comments))
-	for _, cm := range comments {
-		userIDs = append(userIDs, cm.UserID)
-	}
-	users, err := mysql.GetUsersByIDs(userIDs)
-	if err != nil {
-		return nil, err
-	}
-	userMap := make(map[int64]*models.User, len(users))
-	for _, u := range users {
-		userMap[u.UserID] = u
-	}
-	items := make([]*models.ApiCommentDetail, 0, len(comments))
-	var last *models.Comment
-	for _, cm := range comments {
-		last = cm
-		detail := &models.ApiCommentDetail{Comment: cm}
-		if u := userMap[cm.UserID]; u != nil {
-			detail.Username = u.Username
-			detail.AvatarURL = u.AvatarURL
-		}
-		items = append(items, detail)
-	}
-	next := ""
-	if hasMore && last != nil {
-		next = encodeTimeCursor(last.CreateTime, last.CommentID)
-	}
-	return &models.PageResult[*models.ApiCommentDetail]{
-		Items:      items,
-		NextCursor: next,
-		HasMore:    hasMore,
-	}, nil
 }

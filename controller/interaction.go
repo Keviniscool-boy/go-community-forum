@@ -323,9 +323,9 @@ func CreateCommentHandler(c *gin.Context) {
 	ResponseSuccess(c, gin.H{"comment_id": strconv.FormatInt(commentID, 10)})
 }
 
-// ListCommentsHandler 评论列表
+// ListCommentsHandler 评论列表（一级评论）
 // @Summary 评论列表
-// @Description 按 cursor 分页查询目标的评论
+// @Description 按 cursor 分页查询目标的一级评论（最新在前）；回复请用 /comments/{id}/replies。登录后额外返回点赞状态与删除权限
 // @Tags 评论相关接口
 // @Produce json
 // @Param target_type query string true "目标类型：answer | question"
@@ -335,7 +335,8 @@ func CreateCommentHandler(c *gin.Context) {
 // @Success 200 {object} controller.Response{data=models.CommentDetailPage}
 // @Router /comments [get]
 func ListCommentsHandler(c *gin.Context) {
-	data, err := logic.ListComments(c.Query("target_type"), c.Query("target_id"), c.Query("cursor"), atoiDefault(c.Query("limit"), 20))
+	viewerID := tryGetUserID(c)
+	data, err := logic.ListComments(viewerID, viewerRole(c, viewerID), c.Query("target_type"), c.Query("target_id"), c.Query("cursor"), atoiDefault(c.Query("limit"), 20))
 	if err != nil {
 		zap.L().Error("logic.ListComments failed", zap.Error(err))
 		if errors.Is(err, logic.ErrCommentInvalid) || errors.Is(err, logic.ErrCursorInvalid) {
