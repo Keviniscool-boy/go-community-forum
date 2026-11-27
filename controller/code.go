@@ -5,15 +5,15 @@ package controller
 type ResCode int64
 
 const (
-	CodeSuccess           ResCode = 1000
-	CodeInvalidParams     ResCode = 1001
-	CodeUserExist         ResCode = 1002
-	CodeUserNotExist      ResCode = 1003
+	CodeSuccess            ResCode = 1000
+	CodeInvalidParams      ResCode = 1001
+	CodeUserExist          ResCode = 1002
+	CodeUserNotExist       ResCode = 1003
 	CodeInvalidCredentials ResCode = 1004
-	CodePasswordMismatch  ResCode = 1005
-	CodeServerBusy        ResCode = 1006
-	CodePostNotExist      ResCode = 1007
-	CodeCommunityNotExist ResCode = 1008
+	CodePasswordMismatch   ResCode = 1005
+	CodeServerBusy         ResCode = 1006
+	CodePostNotExist       ResCode = 1007
+	CodeCommunityNotExist  ResCode = 1008
 
 	CodeInvalidAuth ResCode = 1009
 	CodeNeedLogin   ResCode = 1010
@@ -31,8 +31,8 @@ const (
 	CodeAnswerNotExist   ResCode = 1019
 	CodeTopicExist       ResCode = 1020
 
-	CodeRegisterFailed  ResCode = 1021
-	CodeSendCodeFailed  ResCode = 1022
+	CodeRegisterFailed   ResCode = 1021
+	CodeSendCodeFailed   ResCode = 1022
 	CodeVerifyCodeLocked ResCode = 1023
 
 	CodeFeedRefreshing ResCode = 1024
@@ -42,6 +42,7 @@ const (
 	CodeResetTokenInvalid ResCode = 1027
 	CodeEmailConflict     ResCode = 1028
 	CodeDraftConflict     ResCode = 1029
+	CodeCommentNotExist   ResCode = 1030
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -75,6 +76,7 @@ var codeMsgMap = map[ResCode]string{
 	CodeResetTokenInvalid:  "重置凭据无效或已过期",
 	CodeEmailConflict:      "该邮箱已被其他账号使用",
 	CodeDraftConflict:      "草稿版本冲突，请刷新后重试",
+	CodeCommentNotExist:    "评论不存在或已被删除",
 }
 
 // 创建一个函数，传入code返回msg

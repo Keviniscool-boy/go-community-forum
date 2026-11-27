@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	"go.uber.org/zap"
 )
 
 // 死锁重试：并发互动同一内容时，不同事务的锁顺序可能交叉（MySQL 1213/1205）。
@@ -37,7 +36,6 @@ func withDeadlockRetry(fn func() error) error {
 var (
 	ErrCannotFollowSelf       = errors.New("不能关注自己")
 	ErrFollowRelationNotExist = errors.New("关注关系不存在")
-	ErrCommentNotExist        = errors.New("评论不存在")
 	ErrInvalidParams          = errors.New("参数不合法")
 )
 
@@ -302,105 +300,7 @@ func IsQuestionFollowed(userID, questionID int64) (bool, error) {
 	return count > 0, err
 }
 
-// ---------- 评论 ----------
-
-// CreateComment 创建评论：评论、目标计数与通知在同一事务
-func CreateComment(cm *models.Comment) error {
-	tx, err := db.Beginx()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	// 事务内取目标作者（通知用）
-	var targetAuthor int64
-	switch cm.TargetType {
-	case models.TargetAnswer:
-		if err = tx.Get(&targetAuthor, "SELECT author_id FROM answer WHERE answer_id = ? FOR UPDATE", cm.TargetID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return ErrAnswerNotExist
-			}
-			return err
-		}
-	case models.TargetQuestion:
-		if err = tx.Get(&targetAuthor, "SELECT author_id FROM question WHERE question_id = ? FOR UPDATE", cm.TargetID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return ErrQuestionNotExist
-			}
-			return err
-		}
-	default:
-		return ErrInvalidParams
-	}
-	if _, err = tx.Exec(
-		"INSERT INTO comment (comment_id, user_id, target_type, target_id, parent_id, content) VALUES (?, ?, ?, ?, ?, ?)",
-		cm.CommentID, cm.UserID, cm.TargetType, cm.TargetID, cm.ParentID, cm.Content); err != nil {
-		return err
-	}
-	switch cm.TargetType {
-	case models.TargetAnswer:
-		if _, err = tx.Exec("UPDATE answer SET comment_count = comment_count + 1 WHERE answer_id = ?", cm.TargetID); err != nil {
-			return err
-		}
-	case models.TargetQuestion:
-		if _, err = tx.Exec("UPDATE question SET comment_count = comment_count + 1 WHERE question_id = ?", cm.TargetID); err != nil {
-			return err
-		}
-	}
-	if err := txCreateNotification(tx, targetAuthor, cm.UserID, models.NotifyTypeComment, cm.TargetType, cm.TargetID); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-// CommentPageParams 评论分页查询参数（cursor）
-type CommentPageParams struct {
-	TargetType int32
-	TargetID   int64
-	CursorTime sql.NullTime
-	CursorID   int64
-	Limit      int
-}
-
-// ListComments 按 cursor 分页查询目标的评论
-func ListComments(p *CommentPageParams) (comments []*models.Comment, err error) {
-	comments = make([]*models.Comment, 0)
-	limit := p.Limit + 1
-	var query string
-	var args []interface{}
-	if p.CursorID == 0 {
-		query = `SELECT comment_id, user_id, target_type, target_id, parent_id, content, status, create_time
-			 FROM comment WHERE target_type = ? AND target_id = ? AND status = 1
-			 AND moderation_status = 1 AND deleted_at IS NULL
-			 ORDER BY create_time DESC, comment_id DESC LIMIT ?`
-		args = []interface{}{p.TargetType, p.TargetID, limit}
-	} else {
-		query = `SELECT comment_id, user_id, target_type, target_id, parent_id, content, status, create_time
-			 FROM comment WHERE target_type = ? AND target_id = ? AND status = 1
-			 AND moderation_status = 1 AND deleted_at IS NULL
-			 AND (create_time < ? OR (create_time = ? AND comment_id < ?))
-			 ORDER BY create_time DESC, comment_id DESC LIMIT ?`
-		args = []interface{}{p.TargetType, p.TargetID, p.CursorTime.Time, p.CursorTime.Time, p.CursorID, limit}
-	}
-	err = db.Select(&comments, query, args...)
-	if err != nil {
-		zap.L().Error("query comments failed", zap.Error(err))
-		return nil, err
-	}
-	return comments, nil
-}
-
-// GetCommentByID 查询单条评论（回复时校验父评论）
-func GetCommentByID(id int64) (*models.Comment, error) {
-	cm := new(models.Comment)
-	err := db.Get(cm, "SELECT comment_id, user_id, target_type, target_id, parent_id, content, status, create_time FROM comment WHERE comment_id = ?", id)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrCommentNotExist
-		}
-		return nil, err
-	}
-	return cm, nil
-}
+// ---------- 评论（点赞、删除、楼中楼见 comment.go） ----------
 
 // ---------- 通知 ----------
 

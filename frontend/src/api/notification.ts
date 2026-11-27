@@ -6,9 +6,10 @@ export interface NotificationDetail {
   id: string
   actor_id: string
   actor_name: string
-  type: number // 1 赞同 2 评论 3 关注 4 收藏
-  target_type: number
-  target_id: string
+  type: number // 1 赞同 2 评论 3 关注 4 收藏 5 赞同评论 6 回复评论
+  target_type: number // 1 回答 2 问题 0 用户
+  target_id: string // 目标为回答时是回答 ID
+  question_id?: string // 目标为回答时的所属问题 ID（跳转用）
   is_read: boolean
   create_time: string
   excerpt: string
