@@ -64,7 +64,7 @@ export function safeRedirect(raw: unknown): string {
 
 // 登录态恢复：路由守卫，需要登录的页面未登录时跳登录页
 router.beforeEach((to) => {
-  document.title = to.meta.title ? `${to.meta.title} - Bluebell 知识社区` : 'Bluebell 知识社区'
+  document.title = to.meta.title ? `${to.meta.title} - 问见` : '问见'
   if (to.meta.requiresAuth && !localStorage.getItem('bb_token')) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
