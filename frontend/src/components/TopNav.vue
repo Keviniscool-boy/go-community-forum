@@ -55,8 +55,8 @@ function onAvatarCommand(command: string) {
 <template>
   <header class="top-nav">
     <div class="top-nav-inner">
-      <el-icon class="mobile-menu-btn" @click="emit('toggle-sidebar')"><Menu /></el-icon>
-      <router-link class="logo" to="/">Bluebell</router-link>
+      <el-icon class="mobile-menu-btn" aria-label="打开导航菜单" role="button" tabindex="0" @click="emit('toggle-sidebar')" @keydown.enter="emit('toggle-sidebar')"><Menu /></el-icon>
+      <router-link class="logo" to="/">问见</router-link>
       <el-input
         v-model="keyword"
         class="search-input"
