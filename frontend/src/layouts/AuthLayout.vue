@@ -4,7 +4,7 @@
 
 <template>
   <div class="auth-layout">
-    <div class="auth-brand">Bluebell 知识社区</div>
+    <div class="auth-brand">问见</div>
     <div class="auth-card bb-card">
       <router-view />
     </div>

@@ -1,22 +1,29 @@
-# Bluebell
+# 问见
 
 <div align="center">
 
-**前后端分离的知识社区项目** —— Go + Gin 后端、Vue 3 前端，邮箱注册登录、问题/回答、推荐与热榜 Feed、关注/点赞/收藏/评论、话题与通知，Swagger 文档、Docker Compose 一键部署。
+_一个让好问题遇见懂行回答者的知识社区_
 
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](go.mod)
 [![Vue Version](https://img.shields.io/badge/Vue-3.5-4FC08D.svg)](frontend/package.json)
 [![CI](https://github.com/Keviniscool-boy/go-community-forum/actions/workflows/ci.yml/badge.svg)](https://github.com/Keviniscool-boy/go-community-forum/actions/workflows/ci.yml)
 
+[项目简介](#项目简介) · [核心能力](#核心能力) · [快速开始](#快速开始) · [技术栈](#技术栈)
 
 </div>
 
 ## 项目简介
 
-Bluebell 是一个前后端分离的社区论坛项目，最初作为 Go Web 开发学习项目逐步演进而来。后端基于 Gin 提供 RESTful API，使用 JWT 实现无状态鉴权；MySQL 负责用户、社区与帖子等关系数据的持久化，Redis 承担投票计数、帖子热度与最新排序；前端使用 Vue 3 + Vite + TypeScript，通过 Nginx 反向代理与后端衔接。项目支持 Docker Compose 一键拉起全部服务，内置 Swagger 接口文档、pprof 性能分析与 GitHub Actions 持续集成。
+问见是一个以问题为入口的中文知识社区。用户可以围绕话题提出问题、分享回答、撰写文章与专栏，也可以关注感兴趣的作者和话题，通过推荐、最新和热榜内容持续发现值得讨论的问题。
 
-## 功能特性
+提问者可以关注问题进展、采纳有帮助的回答；创作者可以管理自己的内容并查看互动。项目还包含审核、举报、通知、搜索与移动端导航等社区能力。
+
+> **项目状态：**本项目仍在持续开发，适合学习和体验知识社区的前后端实现。演示或自托管部署前，请按部署文档配置密钥、邮件服务、数据库备份和审核策略；默认配置不代表生产环境安全基线。
+
+后端基于 Go、Gin 和 MySQL，Redis 用于缓存与互动数据；前端使用 Vue 3、Vite 和 TypeScript。可通过 Docker Compose 启动，也可按下方说明本地运行。
+
+## 核心能力
 
 ### 用户
 
