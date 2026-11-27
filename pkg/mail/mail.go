@@ -48,10 +48,10 @@ func Init() error {
 
 // SendCodeMail 发送验证码邮件
 func SendCodeMail(to, code string) error {
-	subject := "Bluebell 知识社区 - 邮箱验证码"
+	subject := "问见 - 邮箱验证码"
 	body := fmt.Sprintf(`
 <div style="max-width:480px;margin:0 auto;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;">
-  <h2 style="color:#1a1a1a;">Bluebell 知识社区</h2>
+  <h2 style="color:#1a1a1a;">问见</h2>
   <p style="color:#646464;">你的验证码是：</p>
   <p style="font-size:28px;font-weight:700;letter-spacing:6px;color:#0084ff;">%s</p>
   <p style="color:#999;font-size:13px;">验证码 5 分钟内有效，请勿泄露给他人。</p>

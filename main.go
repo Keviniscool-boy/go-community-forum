@@ -25,12 +25,12 @@ import (
 	"go.uber.org/zap"
 )
 
-// @title bluebell 项目接口文档
+// @title 问见知识社区 API
 // @version 1.0
-// @description 基于 Gin + MySQL + Redis 的社区 Web 应用，提供用户、社区、帖子、投票等接口
+// @description 问见是一个以问题为入口的中文知识社区，支持提问、回答、文章、专栏、互动与内容治理。
 // @termsOfService http://swagger.io/terms/
 
-// @contact.name bluebell
+// @contact.name 问见项目维护者
 // @contact.url https://github.com/Keviniscool-boy?tab=repositories
 // @contact.email raotao29@gmail.com
 
