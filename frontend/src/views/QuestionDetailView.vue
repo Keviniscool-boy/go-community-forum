@@ -148,6 +148,11 @@ async function load() {
   error.value = ''
   try {
     question.value = await fetchQuestionDetail(questionId)
+    // 治理重定向（PRD F8）：A 详情自动跳转到 B
+    if (question.value.redirect_to) {
+      router.replace(`/questions/${question.value.redirect_to}?merged=${questionId}`)
+      return
+    }
     // 登录后拉取互动状态
     if (auth.isLoggedIn) {
       try {

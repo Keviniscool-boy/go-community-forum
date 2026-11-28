@@ -14,6 +14,7 @@ type Question struct {
 	ViewCount     int32     `json:"view_count" db:"view_count"`
 	Status        int32     `json:"status" db:"status"`
 	CreateTime    time.Time `json:"create_time" db:"create_time"`
+	RedirectTo    *int64    `json:"redirect_to,omitempty" db:"redirect_to"` // 治理合并目标（PRD F8）
 }
 
 // ApiQuestionDetail 问题详情接口返回模型（问题 + 作者名 + 话题列表）
@@ -106,4 +107,10 @@ type ParamUpdateProfile struct {
 	Username  string `json:"username" binding:"omitempty,min=2,max=32"`
 	Bio       string `json:"bio" binding:"max=500"`
 	AvatarURL string `json:"avatar_url" binding:"max=500"`
+}
+
+// ParamQuestionRedirect 问题重定向请求（PRD F8）
+type ParamQuestionRedirect struct {
+	TargetID string `json:"target_id" binding:"required,min=1"`
+	Note     string `json:"note" binding:"max=500"`
 }

@@ -39,6 +39,8 @@ func Setup() *gin.Engine {
 	auth.POST("/password/reset/verify", controller.VerifyResetCodeHandler)
 	auth.POST("/password/reset", controller.ResetWithTokenHandler)
 	auth.PUT("/profile", middlewares.JWTAuthMiddleware(), controller.UpdateProfileHandler)
+	auth.GET("/notify-settings", middlewares.JWTAuthMiddleware(), controller.GetNotifySettingsHandler)
+	auth.PUT("/notify-settings", middlewares.JWTAuthMiddleware(), controller.SetNotifySettingsHandler)
 	auth.GET("/me", middlewares.JWTAuthMiddleware(), controller.MeHandler)
 	auth.POST("/logout-all", middlewares.JWTAuthMiddleware(), controller.LogoutAllHandler)
 	auth.POST("/email/bind", middlewares.JWTAuthMiddleware(), controller.BindEmailHandler)
@@ -161,6 +163,9 @@ func Setup() *gin.Engine {
 	adminOnly.Use(middlewares.JWTAuthMiddleware(), middlewares.RequireRoleMiddleware(models.RoleAdmin))
 	{
 		adminOnly.POST("/users/:id/disable", controller.AdminSetUserStatusHandler)
+		// 问题重定向（PRD F8 治理工具；可逆）
+		adminOnly.POST("/questions/:id/redirect", controller.SetQuestionRedirectHandler)
+		adminOnly.DELETE("/questions/:id/redirect", controller.ClearQuestionRedirectHandler)
 	}
 
 	// 话题相关路由

@@ -19,6 +19,7 @@ func TestInteractionConsistency(t *testing.T) {
 		email varchar(255) NOT NULL, email_verified tinyint NOT NULL DEFAULT 0, password varchar(64) NOT NULL,
 		avatar_url varchar(500) NOT NULL DEFAULT '', bio varchar(500) NOT NULL DEFAULT '',
 		status tinyint NOT NULL DEFAULT 1, token_version int NOT NULL DEFAULT 0,
+		notify_settings json NULL,
 		PRIMARY KEY (id), UNIQUE KEY idx_user_id (user_id)) ENGINE=InnoDB`)
 	mustExec(t, `CREATE TABLE question (
 		id bigint NOT NULL AUTO_INCREMENT, question_id bigint NOT NULL, title varchar(200) NOT NULL,

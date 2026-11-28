@@ -93,6 +93,7 @@ func LatestMigrationVersion(ctx context.Context) (int, error) {
 // TxLike 事务句柄的最小接口（*sqlx.Tx 满足；便于跨 DAO 组合事务）
 type TxLike interface {
 	Get(dest interface{}, query string, args ...interface{}) error
+	QueryRow(query string, args ...interface{}) *sql.Row
 	Exec(query string, args ...interface{}) (sql.Result, error)
 }
 

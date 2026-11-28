@@ -20,6 +20,7 @@ func TestResetTokenSingleUse(t *testing.T) {
 		email varchar(255) NOT NULL, email_verified tinyint NOT NULL DEFAULT 0, password varchar(64) NOT NULL,
 		avatar_url varchar(500) NOT NULL DEFAULT '', bio varchar(500) NOT NULL DEFAULT '',
 		status tinyint NOT NULL DEFAULT 1, token_version int NOT NULL DEFAULT 0,
+		notify_settings json NULL,
 		PRIMARY KEY (id), UNIQUE KEY uk_user_email (email)) ENGINE=InnoDB`)
 	mustExec(t, `CREATE TABLE password_reset_token (
 		id bigint NOT NULL AUTO_INCREMENT, email varchar(255) NOT NULL, token_hash char(64) NOT NULL,
@@ -90,6 +91,7 @@ func TestBindEmailConflict(t *testing.T) {
 		email varchar(255) NOT NULL, email_verified tinyint NOT NULL DEFAULT 0, password varchar(64) NOT NULL,
 		avatar_url varchar(500) NOT NULL DEFAULT '', bio varchar(500) NOT NULL DEFAULT '',
 		status tinyint NOT NULL DEFAULT 1, token_version int NOT NULL DEFAULT 0,
+		notify_settings json NULL,
 		PRIMARY KEY (id), UNIQUE KEY uk_user_email (email)) ENGINE=InnoDB`)
 	mustExec(t, "INSERT INTO user (user_id, username, email, email_verified, password) VALUES "+
 		"(1, 'legacy', 'legacy_1@placeholder.invalid', 0, 'h'), (2, 'other', 'taken@test.local', 1, 'h')")

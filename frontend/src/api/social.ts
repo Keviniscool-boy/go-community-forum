@@ -63,3 +63,12 @@ export function markNotificationRead(notificationId: string) {
 export function editComment(commentId: string, content: string) {
   return http.patch<unknown>(`comments/${commentId}`, { content })
 }
+
+// 通知偏好（第五阶段 F7）
+export function fetchNotifySettings() {
+  return http.get<Record<string, boolean>>('auth/notify-settings')
+}
+
+export function setNotifySettings(pref: Record<string, boolean>) {
+  return http.put<Record<string, boolean>>('auth/notify-settings', pref)
+}

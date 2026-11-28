@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"encoding/json"
 	"time"
 )
 
@@ -52,6 +53,59 @@ type Comment struct {
 	DeletedAt        sql.NullTime `json:"-" db:"deleted_at"`
 	CreateTime       time.Time    `json:"create_time" db:"create_time"`
 	UpdateTime       sql.NullTime `json:"-" db:"update_time"` // 编辑时间（>create_time 视为已编辑）
+}
+
+// 通知偏好（PRD F7）：键位 like/comment/reply/collect/dm；缺省或 NULL = 开启
+type NotifySettings struct {
+	Like    *bool `json:"like,omitempty"`
+	Comment *bool `json:"comment,omitempty"`
+	Reply   *bool `json:"reply,omitempty"`
+	Collect *bool `json:"collect,omitempty"`
+	DM      *bool `json:"dm,omitempty"`
+}
+
+// NotifyEnabled 解析偏好：key 未设置或解析失败视为开启
+func NotifyEnabled(raw []byte, key string) bool {
+	if len(raw) == 0 {
+		return true
+	}
+	var ns NotifySettings
+	if err := json.Unmarshal(raw, &ns); err != nil {
+		return true
+	}
+	var v *bool
+	switch key {
+	case "like":
+		v = ns.Like
+	case "comment":
+		v = ns.Comment
+	case "reply":
+		v = ns.Reply
+	case "collect":
+		v = ns.Collect
+	case "dm":
+		v = ns.DM
+	default:
+		return true
+	}
+	return v == nil || *v
+}
+
+// NotifySettingKey 通知类型 → 偏好键；空串 = 不可关闭（如关注、系统类）
+func NotifySettingKey(notifyType int32) string {
+	switch notifyType {
+	case 1, 5: // 赞同 / 赞同了你的评论
+		return "like"
+	case 2: // 评论
+		return "comment"
+	case 6: // 回复了你的评论
+		return "reply"
+	case 4: // 收藏
+		return "collect"
+	case 7: // 私信
+		return "dm"
+	}
+	return ""
 }
 
 // BlockedUserItem 黑名单条目

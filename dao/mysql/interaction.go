@@ -316,6 +316,19 @@ func txCreateNotification(tx TxLike, userID, actorID int64, notifyType int32, ta
 	} else if blocked {
 		return nil
 	}
+	// 通知偏好（PRD F7）：写点收敛在此统一判断；不可关闭类型（follow/系统类）不受影响
+	if key := models.NotifySettingKey(notifyType); key != "" {
+		var raw []byte
+		if err := tx.QueryRow("SELECT notify_settings FROM user WHERE user_id = ?", userID).Scan(&raw); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+		if !models.NotifyEnabled(raw, key) {
+			return nil
+		}
+	}
 	_, err := tx.Exec(
 		"INSERT INTO notification (notification_id, user_id, actor_id, type, target_type, target_id) VALUES (?, ?, ?, ?, ?, ?)",
 		snowflake.GenerateID(), userID, actorID, notifyType, targetType, targetID)

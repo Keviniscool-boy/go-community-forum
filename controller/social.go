@@ -251,3 +251,112 @@ func EditCommentHandler(c *gin.Context) {
 	}
 	ResponseSuccess(c, detail)
 }
+
+// GetNotifySettingsHandler 读取通知偏好
+// @Summary 读取通知偏好
+// @Description 按类型开关（like/comment/reply/collect/dm），缺省全开
+// @Tags 用户相关接口
+// @Security ApiKeyAuth
+// @Success 200 {object} controller.Response{data=map[string]bool}
+// @Router /auth/notify-settings [get]
+func GetNotifySettingsHandler(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ResponseError(c, CodeNeedLogin)
+		return
+	}
+	data, err := logic.GetNotifySettings(userID)
+	if err != nil {
+		respondSocialError(c, err)
+		return
+	}
+	ResponseSuccess(c, data)
+}
+
+// SetNotifySettingsHandler 写通知偏好
+// @Summary 写通知偏好
+// @Description 全量覆盖；键位 like/comment/reply/collect/dm；关闭仅影响新通知的产生
+// @Tags 用户相关接口
+// @Security ApiKeyAuth
+// @Param object body map[string]bool true "偏好"
+// @Success 200 {object} controller.Response
+// @Router /auth/notify-settings [put]
+func SetNotifySettingsHandler(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ResponseError(c, CodeNeedLogin)
+		return
+	}
+	pref := map[string]bool{}
+	if err := c.ShouldBindJSON(&pref); err != nil {
+		ResponseErrorWithMsg(c, CodeInvalidParams, Translate(err))
+		return
+	}
+	if err := logic.SetNotifySettings(userID, pref); err != nil {
+		respondSocialError(c, err)
+		return
+	}
+	ResponseSuccess(c, pref)
+}
+
+// SetQuestionRedirectHandler 问题重定向（治理）
+// @Summary 问题重定向到目标问题
+// @Description 仅 admin；可逆（DELETE 清除）；审计记录动作与原因
+// @Tags 管理接口
+// @Security ApiKeyAuth
+// @Param id path int true "源问题 ID（被合并）"
+// @Param object body models.ParamQuestionRedirect true "目标与原因"
+// @Success 200 {object} controller.Response
+// @Router /admin/questions/{id}/redirect [post]
+func SetQuestionRedirectHandler(c *gin.Context) {
+	operatorID, err := getCurrentUserID(c)
+	if err != nil {
+		ResponseError(c, CodeNeedLogin)
+		return
+	}
+	questionID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || questionID <= 0 {
+		ResponseError(c, CodeInvalidParams)
+		return
+	}
+	p := new(models.ParamQuestionRedirect)
+	if err := c.ShouldBindJSON(p); err != nil {
+		ResponseErrorWithMsg(c, CodeInvalidParams, Translate(err))
+		return
+	}
+	targetID, perr := strconv.ParseInt(p.TargetID, 10, 64)
+	if perr != nil || targetID <= 0 {
+		ResponseError(c, CodeInvalidParams)
+		return
+	}
+	if err := logic.SetQuestionRedirect(operatorID, questionID, targetID, p.Note); err != nil {
+		respondSocialError(c, err)
+		return
+	}
+	ResponseSuccess(c, nil)
+}
+
+// ClearQuestionRedirectHandler 清除问题重定向
+// @Summary 清除问题重定向（可逆）
+// @Tags 管理接口
+// @Security ApiKeyAuth
+// @Param id path int true "源问题 ID"
+// @Success 200 {object} controller.Response
+// @Router /admin/questions/{id}/redirect [delete]
+func ClearQuestionRedirectHandler(c *gin.Context) {
+	operatorID, err := getCurrentUserID(c)
+	if err != nil {
+		ResponseError(c, CodeNeedLogin)
+		return
+	}
+	questionID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || questionID <= 0 {
+		ResponseError(c, CodeInvalidParams)
+		return
+	}
+	if err := logic.ClearQuestionRedirect(operatorID, questionID); err != nil {
+		respondSocialError(c, err)
+		return
+	}
+	ResponseSuccess(c, nil)
+}

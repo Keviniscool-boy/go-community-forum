@@ -414,3 +414,22 @@ func listFollowRelations(relCol, userCol string, targetID int64, viewerID int64,
 	}
 	return items, nil
 }
+
+// GetNotifySettingsRaw 读取通知偏好原始 JSON（"null" 表示全部开启）
+func GetNotifySettingsRaw(userID int64) ([]byte, error) {
+	var raw []byte
+	err := db.Get(&raw, "SELECT COALESCE(notify_settings, 'null') FROM user WHERE user_id = ?", userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotExist
+		}
+		return nil, err
+	}
+	return raw, nil
+}
+
+// SetNotifySettings 写入通知偏好 JSON（PRD F7）
+func SetNotifySettings(userID int64, raw []byte) error {
+	_, err := db.Exec("UPDATE user SET notify_settings = CAST(? AS JSON) WHERE user_id = ? AND status = 1", raw, userID)
+	return err
+}
