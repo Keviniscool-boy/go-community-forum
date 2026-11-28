@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"database/sql"
 	"context"
 	"fmt"
 	"time"
@@ -87,4 +88,24 @@ func LatestMigrationVersion(ctx context.Context) (int, error) {
 	err := db.GetContext(ctx, &v,
 		"SELECT COALESCE(MAX(version), -1) FROM schema_migrations")
 	return v, err
+}
+
+// TxLike 事务句柄的最小接口（*sqlx.Tx 满足；便于跨 DAO 组合事务）
+type TxLike interface {
+	Get(dest interface{}, query string, args ...interface{}) error
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
+
+// WithTx 在单事务内执行 fn：成功提交，失败回滚并返回错误
+func WithTx(fn func(tx TxLike) error) error {
+	tx, err := db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	handle := TxLike(tx)
+	if err = fn(handle); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

@@ -35,6 +35,7 @@ const (
 	// 第四阶段：评论体系补全（追加在末尾，不改动已发布类型编号）
 	NotifyTypeCommentLike = 5 // 赞同了你的评论
 	NotifyTypeReply       = 6 // 回复了你的评论
+	NotifyTypeDM          = 7 // 私信（第五阶段 F6，时间窗聚合）
 )
 
 // Comment 评论模型

@@ -83,6 +83,14 @@ func Setup() *gin.Engine {
 	v1.DELETE("/comments/:id", middlewares.JWTAuthMiddleware(), controller.DeleteCommentHandler)
 
 	// 通知相关路由
+	// 私信（第五阶段 F6）
+	v1.GET("/messages/threads", middlewares.JWTAuthMiddleware(), controller.ListMessageThreadsHandler)
+	v1.GET("/messages/threads/:id", middlewares.JWTAuthMiddleware(), controller.GetMessageThreadHandler)
+	v1.GET("/messages/unread-count", middlewares.JWTAuthMiddleware(), controller.MessageUnreadCountHandler)
+	v1.POST("/messages/users/:id", middlewares.JWTAuthMiddleware(), controller.OpenDirectMessageHandler)
+	v1.POST("/messages/threads/:id", middlewares.JWTAuthMiddleware(), controller.ReplyMessageHandler)
+	v1.DELETE("/messages/threads/:id", middlewares.JWTAuthMiddleware(), controller.DeleteThreadHandler)
+
 	v1.GET("/notifications", middlewares.JWTAuthMiddleware(), controller.ListNotificationsHandler)
 	v1.PATCH("/notifications/:id/read", middlewares.JWTAuthMiddleware(), controller.MarkNotificationReadHandler)
 	v1.GET("/notifications/unread-count", middlewares.JWTAuthMiddleware(), controller.UnreadCountHandler)

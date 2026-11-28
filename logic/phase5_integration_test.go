@@ -5,21 +5,30 @@ package logic
 // 迁移链临时库 + 自包含种子；BB_TEST_MYSQL_DSN / BB_TEST_REDIS_ADDR 启用。
 
 import (
+	"context"
 	"errors"
 	"time"
 	"fmt"
 	"os"
 	"strconv"
+	"sync"
 	"testing"
 
 	"bluebell/dao/mysql"
+	"bluebell/dao/redis"
 	"bluebell/models"
 	"bluebell/pkg/snowflake"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/spf13/viper"
 )
 
 var phase5DSN = os.Getenv("BB_TEST_MYSQL_DSN")
+
+var (
+	redisOnce    sync.Once
+	redisInitErr error
+)
 
 // phase5Env 迁移链临时库 + 全局 DB 指向 + 种子用户（a/b/c）
 func phase5Env(t *testing.T) (aID, bID, cID int64) {
@@ -29,6 +38,22 @@ func phase5Env(t *testing.T) (aID, bID, cID int64) {
 	}
 	if err := snowflake.Init("2026-07-24 00:00:00", 1); err != nil {
 		t.Fatalf("init snowflake: %v", err)
+	}
+	// Redis（DM 限流计数等）：进程内一次性初始化，指向测试实例
+	redisOnce.Do(func() {
+		viper.Set("redis.host", "127.0.0.1")
+		viper.Set("redis.port", 26379)
+		viper.Set("redis.db", 0)
+		redisInitErr = redis.Init()
+		if redisInitErr == nil {
+			// 清空共享 Redis 实例（限流计数跨运行残留会导致假阳性）
+			if ferr := redis.GetClient().FlushDB(context.Background()).Err(); ferr != nil {
+				redisInitErr = ferr
+			}
+		}
+	})
+	if redisInitErr != nil {
+		t.Fatalf("init redis: %v", redisInitErr)
 	}
 	root, err := sqlx.Connect("mysql", phase5DSN)
 	if err != nil {

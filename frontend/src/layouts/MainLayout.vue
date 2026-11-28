@@ -32,6 +32,9 @@ const isMobileSidebarVisible = ref(false)
           <router-link class="side-link" to="/drafts">
             <el-icon><Document /></el-icon><span>草稿箱</span>
           </router-link>
+          <router-link class="side-link" to="/messages">
+            <el-icon><ChatDotRound /></el-icon><span>私信</span>
+          </router-link>
           <router-link class="side-link" to="/bookmarks">
             <el-icon><Star /></el-icon><span>收藏夹</span>
           </router-link>

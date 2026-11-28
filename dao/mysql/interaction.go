@@ -307,7 +307,7 @@ func IsQuestionFollowed(userID, questionID int64) (bool, error) {
 // txCreateNotification 在互动事务内写入通知（自己给自己的动作不通知）
 // 通知与互动同事务：要么都成功要么都回滚，不允许先返回成功再静默丢通知。
 // 拉黑期间（任一方拉黑对方）不产生新通知（PRD F2），历史通知保留。
-func txCreateNotification(tx *sqlx.Tx, userID, actorID int64, notifyType int32, targetType int32, targetID int64) error {
+func txCreateNotification(tx TxLike, userID, actorID int64, notifyType int32, targetType int32, targetID int64) error {
 	if userID == actorID {
 		return nil
 	}
@@ -366,6 +366,11 @@ func GetNotificationByID(notificationID int64) (*models.Notification, error) {
 
 // ErrNotificationNotExist 通知不存在
 var ErrNotificationNotExist = errors.New("通知不存在")
+
+// CreateNotificationTx 导出的事务内通知写入（私信等跨域联动使用）
+func CreateNotificationTx(tx TxLike, userID, actorID int64, notifyType int32, targetType int32, targetID int64) error {
+	return txCreateNotification(tx, userID, actorID, notifyType, targetType, targetID)
+}
 
 // MarkNotificationRead 单条已读（PRD F3）：仅接收人本人可操作；幂等
 func MarkNotificationRead(notificationID, userID int64) (bool, error) {

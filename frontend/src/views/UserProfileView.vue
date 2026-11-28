@@ -51,6 +51,10 @@ async function loadInteractions() {
   }
 }
 
+function onMessage() {
+  router.push({ name: 'chat', params: { id: 'new:' + userId } })
+}
+
 async function onToggleBlock() {
   try {
     if (isBlocked.value) {
@@ -163,6 +167,9 @@ onMounted(() => {
             @click="onFollow"
           >
             {{ profile.is_following ? '已关注' : '+ 关注' }}
+          </el-button>
+          <el-button v-if="!isSelf && !isBlocked" size="round" plain @click="onMessage">
+            私信
           </el-button>
           <el-button v-if="!isSelf" size="round" plain :type="isBlocked ? 'danger' : 'default'" @click="onToggleBlock">
             {{ isBlocked ? '已拉黑' : '拉黑' }}

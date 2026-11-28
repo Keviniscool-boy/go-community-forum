@@ -10,8 +10,6 @@ import (
 	"strconv"
 
 	"bluebell/models"
-
-	"github.com/jmoiron/sqlx"
 )
 
 var ErrBlockSelf = errors.New("不能拉黑自己")
@@ -26,7 +24,7 @@ func IsBlockedBetween(a, b int64) (bool, error) {
 }
 
 // isBlockedBetweenTx 事务内双向屏蔽判定（通知跳过/关注拒绝等场景）
-func isBlockedBetweenTx(tx *sqlx.Tx, a, b int64) (bool, error) {
+func isBlockedBetweenTx(tx TxLike, a, b int64) (bool, error) {
 	var n int
 	err := tx.Get(&n,
 		"SELECT COUNT(*) FROM user_block WHERE (user_id = ? AND blocked_id = ?) OR (user_id = ? AND blocked_id = ?)",
