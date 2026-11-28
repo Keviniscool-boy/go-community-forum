@@ -76,6 +76,10 @@ definitions:
     - CodeResetTokenInvalid
     - CodeEmailConflict
     - CodeDraftConflict
+<<<<<<< HEAD
+=======
+    - CodeCommentNotExist
+>>>>>>> feat/phase5-social-dm
   controller.Response:
     properties:
       code:
@@ -221,6 +225,9 @@ definitions:
     properties:
       avatar_url:
         type: string
+      can_delete:
+        description: 当前用户是否可删除（作者或管理员/审核员）
+        type: boolean
       content:
         type: string
       create_time:
@@ -228,8 +235,22 @@ definitions:
       id:
         example: "0"
         type: string
+      is_deleted:
+        description: 已删除但保留占位（下方仍有可见回复）
+        type: boolean
+      like_count:
+        type: integer
+      liked:
+        description: 当前用户是否已点赞
+        type: boolean
       parent_id:
         example: "0"
+        type: string
+      reply_count:
+        description: 直接回复数（仅一级评论有效）
+        type: integer
+      reply_to_user:
+        description: 被回复的回复的作者（「回复 @xxx」）
         type: string
       status:
         type: integer
@@ -260,6 +281,9 @@ definitions:
         type: string
       is_read:
         type: boolean
+      question_id:
+        description: 目标为回答时的所属问题 ID：通知跳转用（回答通知的 target_id 是回答 ID，不能直接拼问题地址）
+        type: string
       target_id:
         example: "0"
         type: string
@@ -1479,7 +1503,7 @@ paths:
       - 认证相关接口
   /comments:
     get:
-      description: 按 cursor 分页查询目标的评论
+      description: 按 cursor 分页查询目标的一级评论（最新在前）；回复请用 /comments/{id}/replies。登录后额外返回点赞状态与删除权限
       parameters:
       - description: 目标类型：answer | question
         in: query
@@ -1542,6 +1566,99 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: 创建评论
+      tags:
+      - 评论相关接口
+  /comments/{id}:
+    delete:
+      description: 软删除评论：仅作者本人或管理员/审核员；其下回复保留，所属内容评论数同步回算
+      parameters:
+      - description: 评论 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 删除评论
+      tags:
+      - 评论相关接口
+  /comments/{id}/like:
+    delete:
+      parameters:
+      - description: 评论 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 取消点赞评论
+      tags:
+      - 评论相关接口
+    post:
+      description: 给评论点赞，需登录，幂等（重复点赞不重复计数）
+      parameters:
+      - description: 评论 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: 点赞评论
+      tags:
+      - 评论相关接口
+  /comments/{id}/replies:
+    get:
+      description: 按 cursor 分页查询某条一级评论下的回复（最早在前）；父评论已删除时仍返回其下回复
+      parameters:
+      - description: 一级评论 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 游标
+        in: query
+        name: cursor
+        type: string
+      - description: 数量，默认 20，最大 50
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/controller.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.CommentDetailPage'
+              type: object
+      summary: 楼中楼回复列表
       tags:
       - 评论相关接口
   /community:

@@ -1,6 +1,8 @@
 package logic
 
 import (
+	"encoding/json"
+	"strconv"
 	"errors"
 
 	"bluebell/dao/mysql"
@@ -68,4 +70,81 @@ func Login(p *models.ParamLogin) (token string, err error) {
 	//生成jwt（携带 token_version，密码重置后旧 token 失效）
 	return jwt.GenToken(user.UserID, user.Username, user.TokenVersion)
 
+}
+
+// ErrInvalidNotifySetting 通知偏好键不合法
+var ErrInvalidNotifySetting = errors.New("通知偏好键不合法")
+
+// GetNotifySettings 读通知偏好（缺省键返回 true）
+func GetNotifySettings(userID int64) (map[string]bool, error) {
+	raw, err := mysql.GetNotifySettingsRaw(userID)
+	if err != nil {
+		return nil, err
+	}
+	keys := []string{"like", "comment", "reply", "collect", "dm"}
+	out := make(map[string]bool, len(keys))
+	var parsed map[string]*bool
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &parsed)
+	}
+	for _, k := range keys {
+		v, ok := parsed[k]
+		out[k] = !ok || v == nil || *v
+	}
+	return out, nil
+}
+
+// SetNotifySettings 写通知偏好（全量覆盖；键校验）
+func SetNotifySettings(userID int64, pref map[string]bool) error {
+	valid := map[string]bool{"like": true, "comment": true, "reply": true, "collect": true, "dm": true}
+	for k := range pref {
+		if !valid[k] {
+			return ErrInvalidNotifySetting
+		}
+	}
+	raw, err := json.Marshal(pref)
+	if err != nil {
+		return err
+	}
+	return mysql.SetNotifySettings(userID, raw)
+}
+
+// SetQuestionRedirect 治理重定向（PRD F8；仅 admin，controller 层走 RequireRole）
+func SetQuestionRedirect(operatorID, questionID, targetID int64, note string) error {
+	if err := mysql.ValidateRedirectTarget(questionID, targetID); err != nil {
+		return err
+	}
+	if err := mysql.SetQuestionRedirect(questionID, targetID, operatorID); err != nil {
+		return err
+	}
+	meta, _ := json.Marshal(map[string]interface{}{
+		"target_id": strconv.FormatInt(targetID, 10),
+		"note":      note,
+	})
+	_ = mysql.CreateAuditLog(&models.AuditLog{
+		AuditID:  snowflake.GenerateID(),
+		ActorID:  operatorID,
+		Action:   "question_redirect",
+		TargetType: "question",
+		TargetID: strconv.FormatInt(questionID, 10),
+		RequestID: "",
+		Metadata: string(meta),
+	})
+	return nil
+}
+
+// ClearQuestionRedirect 清除重定向（可逆）
+func ClearQuestionRedirect(operatorID, questionID int64) error {
+	if err := mysql.SetQuestionRedirect(questionID, 0, operatorID); err != nil {
+		return err
+	}
+	_ = mysql.CreateAuditLog(&models.AuditLog{
+		AuditID:  snowflake.GenerateID(),
+		ActorID:  operatorID,
+		Action:   "question_redirect_clear",
+		TargetType: "question",
+		TargetID: strconv.FormatInt(questionID, 10),
+		Metadata: "{}",
+	})
+	return nil
 }

@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	"go.uber.org/zap"
 )
 
 // 死锁重试：并发互动同一内容时，不同事务的锁顺序可能交叉（MySQL 1213/1205）。
@@ -37,7 +36,6 @@ func withDeadlockRetry(fn func() error) error {
 var (
 	ErrCannotFollowSelf       = errors.New("不能关注自己")
 	ErrFollowRelationNotExist = errors.New("关注关系不存在")
-	ErrCommentNotExist        = errors.New("评论不存在")
 	ErrInvalidParams          = errors.New("参数不合法")
 )
 
@@ -302,115 +300,7 @@ func IsQuestionFollowed(userID, questionID int64) (bool, error) {
 	return count > 0, err
 }
 
-// ---------- 评论 ----------
-
-// CreateComment 创建评论：评论、目标计数与通知在同一事务
-func CreateComment(cm *models.Comment) error {
-	tx, err := db.Beginx()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	// 事务内取目标作者（通知用）
-	var targetAuthor int64
-	switch cm.TargetType {
-	case models.TargetAnswer:
-		if err = tx.Get(&targetAuthor, "SELECT author_id FROM answer WHERE answer_id = ? FOR UPDATE", cm.TargetID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return ErrAnswerNotExist
-			}
-			return err
-		}
-	case models.TargetQuestion:
-		if err = tx.Get(&targetAuthor, "SELECT author_id FROM question WHERE question_id = ? FOR UPDATE", cm.TargetID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return ErrQuestionNotExist
-			}
-			return err
-		}
-	case models.TargetArticle:
-		if err = tx.Get(&targetAuthor, "SELECT author_id FROM article WHERE article_id = ? FOR UPDATE", cm.TargetID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return ErrArticleNotExist
-			}
-			return err
-		}
-	default:
-		return ErrInvalidParams
-	}
-	if _, err = tx.Exec(
-		"INSERT INTO comment (comment_id, user_id, target_type, target_id, parent_id, content) VALUES (?, ?, ?, ?, ?, ?)",
-		cm.CommentID, cm.UserID, cm.TargetType, cm.TargetID, cm.ParentID, cm.Content); err != nil {
-		return err
-	}
-	switch cm.TargetType {
-	case models.TargetAnswer:
-		if _, err = tx.Exec("UPDATE answer SET comment_count = comment_count + 1 WHERE answer_id = ?", cm.TargetID); err != nil {
-			return err
-		}
-	case models.TargetQuestion:
-		if _, err = tx.Exec("UPDATE question SET comment_count = comment_count + 1 WHERE question_id = ?", cm.TargetID); err != nil {
-			return err
-		}
-	case models.TargetArticle:
-		// 文章表无 comment_count 冗余列，计数按关系表查询；通知照发
-	}
-	if err := txCreateNotification(tx, targetAuthor, cm.UserID, models.NotifyTypeComment, cm.TargetType, cm.TargetID); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-// CommentPageParams 评论分页查询参数（cursor）
-type CommentPageParams struct {
-	TargetType int32
-	TargetID   int64
-	CursorTime sql.NullTime
-	CursorID   int64
-	Limit      int
-}
-
-// ListComments 按 cursor 分页查询目标的评论
-func ListComments(p *CommentPageParams) (comments []*models.Comment, err error) {
-	comments = make([]*models.Comment, 0)
-	limit := p.Limit + 1
-	var query string
-	var args []interface{}
-	if p.CursorID == 0 {
-		query = `SELECT comment_id, user_id, target_type, target_id, parent_id, content, status, create_time
-			 FROM comment WHERE target_type = ? AND target_id = ? AND status = 1 AND moderation_status = 1
-			 AND moderation_status = 1 AND deleted_at IS NULL
-			 ORDER BY create_time DESC, comment_id DESC LIMIT ?`
-		args = []interface{}{p.TargetType, p.TargetID, limit}
-	} else {
-		query = `SELECT comment_id, user_id, target_type, target_id, parent_id, content, status, create_time
-			 FROM comment WHERE target_type = ? AND target_id = ? AND status = 1 AND moderation_status = 1
-			 AND moderation_status = 1 AND deleted_at IS NULL
-			 AND (create_time < ? OR (create_time = ? AND comment_id < ?))
-			 ORDER BY create_time DESC, comment_id DESC LIMIT ?`
-		args = []interface{}{p.TargetType, p.TargetID, p.CursorTime.Time, p.CursorTime.Time, p.CursorID, limit}
-	}
-	err = db.Select(&comments, query, args...)
-	if err != nil {
-		zap.L().Error("query comments failed", zap.Error(err))
-		return nil, err
-	}
-	return comments, nil
-}
-
-// GetCommentByID 查询单条评论（回复时校验父评论）
-func GetCommentByID(id int64) (*models.Comment, error) {
-	cm := new(models.Comment)
-	err := db.Get(cm, "SELECT comment_id, user_id, target_type, target_id, parent_id, content, status, create_time FROM comment WHERE comment_id = ?", id)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrCommentNotExist
-		}
-		return nil, err
-	}
-	return cm, nil
-}
-
+// ---------- 评论（点赞、删除、楼中楼见 comment.go） ----------
 // ---------- 通知 ----------
 
 // CreateNotification 独立写入通知（outbox worker 使用；自己给自己的动作不通知）
@@ -425,10 +315,29 @@ func CreateNotification(n *models.Notification) error {
 }
 
 // txCreateNotification 在互动事务内写入通知（自己给自己的动作不通知）
-// 通知与互动同事务：要么都成功要么都回滚，不允许先返回成功再静默丢通知
-func txCreateNotification(tx *sqlx.Tx, userID, actorID int64, notifyType int32, targetType int32, targetID int64) error {
+// 通知与互动同事务：要么都成功要么都回滚，不允许先返回成功再静默丢通知。
+// 拉黑期间（任一方拉黑对方）不产生新通知（PRD F2），历史通知保留。
+func txCreateNotification(tx TxLike, userID, actorID int64, notifyType int32, targetType int32, targetID int64) error {
 	if userID == actorID {
 		return nil
+	}
+	if blocked, err := isBlockedBetweenTx(tx, userID, actorID); err != nil {
+		return err
+	} else if blocked {
+		return nil
+	}
+	// 通知偏好（PRD F7）：写点收敛在此统一判断；不可关闭类型（follow/系统类）不受影响
+	if key := models.NotifySettingKey(notifyType); key != "" {
+		var raw []byte
+		if err := tx.QueryRow("SELECT notify_settings FROM user WHERE user_id = ?", userID).Scan(&raw); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+		if !models.NotifyEnabled(raw, key) {
+			return nil
+		}
 	}
 	_, err := tx.Exec(
 		"INSERT INTO notification (notification_id, user_id, actor_id, type, target_type, target_id) VALUES (?, ?, ?, ?, ?, ?)",
@@ -525,12 +434,32 @@ func notificationTypeCode(s string) int32 {
 	return NotificationTypeFilter(s)
 }
 
-
 // CountUnreadNotifications 查询未读通知数
 func CountUnreadNotifications(userID int64) (int, error) {
 	var n int
 	err := db.Get(&n, "SELECT COUNT(notification_id) FROM notification WHERE user_id = ? AND is_read = 0", userID)
 	return n, err
+}
+
+// GetNotificationByID 查询单条通知（单条已读的归属校验用）
+func GetNotificationByID(notificationID int64) (*models.Notification, error) {
+	n := new(models.Notification)
+	err := db.Get(n, "SELECT notification_id, user_id, actor_id, type, target_type, target_id, is_read, create_time FROM notification WHERE notification_id = ?", notificationID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotificationNotExist
+		}
+		return nil, err
+	}
+	return n, nil
+}
+
+// ErrNotificationNotExist 通知不存在
+var ErrNotificationNotExist = errors.New("通知不存在")
+
+// CreateNotificationTx 导出的事务内通知写入（私信等跨域联动使用）
+func CreateNotificationTx(tx TxLike, userID, actorID int64, notifyType int32, targetType int32, targetID int64) error {
+	return txCreateNotification(tx, userID, actorID, notifyType, targetType, targetID)
 }
 
 // MarkAllNotificationsRead 全部标记已读

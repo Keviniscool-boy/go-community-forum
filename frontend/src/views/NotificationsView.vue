@@ -3,10 +3,11 @@
 import { ref, onMounted } from 'vue'
 import { useNotificationStore } from '@/stores/notification'
 import { useAuthStore } from '@/stores/auth'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { markNotificationRead } from '@/api/notification'
 import { acceptAnswerInvitation, declineAnswerInvitation } from '@/api/invitation'
 import { ApiError } from '@/api/http'
+import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 import LoadingState from '@/components/LoadingState.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
@@ -42,15 +43,33 @@ async function onReadAll() {
   }
 }
 
-// 通知跳转：关注类跳用户主页；邀请类用 question_id；其余按目标跳转
+// 通知跳转：关注类跳用户主页；邀请类用 question_id；问题类跳问题页；回答/评论类跳所属问题并定位到该回答（#answer-<id>）
+// 注意 target_type 1 是回答、2 是问题、3 是文章；回答通知的 target_id 是回答 ID，必须用 question_id 拼地址
 function targetLink(n: { type: number; target_type: number; target_id: string; actor_id: string; question_id?: string }): string {
   if (n.type === 3) return `/users/${n.target_id || n.actor_id}`
   if (n.type === 9 && n.question_id) return `/questions/${n.question_id}`
-  return `/questions/${n.target_id}`
+  if (n.target_type === 2) return `/questions/${n.target_id}`
+  if (n.question_id) return `/questions/${n.question_id}#answer-${n.target_id}`
+  return '/'
 }
 
+// 1 赞同 2 评论 3 关注 4 收藏 5 私信 6 采纳 7 撤销采纳 8 新回答 9 邀请回答 10/11 邀请响应 12 赞同评论 13 回复评论
 const typeIcon = (t: number) =>
-  ({ 1: '👍', 2: '💬', 3: '➕', 4: '⭐', 6: '✅', 7: '↩️', 8: '📝', 9: '✉️', 10: '🙋', 11: '🙏' })[t] || '🔔'
+  ({ 1: '👍', 2: '💬', 3: '➕', 4: '⭐', 5: '✉️', 6: '✅', 7: '↩️', 8: '📝', 9: '✉️', 10: '🙋', 11: '🙏', 12: '👍', 13: '💬' })[t] || '🔔'
+
+// 点击通知：先单条已读（PRD F3）再跳转；红点即时消失，未读角标 -1
+async function onItemClick(n: { id: string; is_read: boolean; type: number; target_type: number; target_id: string; actor_id: string; question_id?: string }) {
+  if (!n.is_read) {
+    try {
+      await markNotificationRead(n.id)
+      n.is_read = true
+      if (store.unreadCount > 0) store.unreadCount -= 1
+    } catch (e) {
+      if (e instanceof ApiError) ElMessage.error(e.message)
+    }
+  }
+  router.push(targetLink(n))
+}
 
 // 邀请通知（type 9）内联接受/婉拒
 async function respondInvite(inv: InviteNotification, decision: 'accept' | 'decline') {
@@ -87,7 +106,7 @@ async function respondInvite(inv: InviteNotification, decision: 'accept' | 'decl
         :key="n.id"
         class="bb-card notif-item"
         :class="{ unread: !n.is_read }"
-        @click="router.push(targetLink(n))"
+        @click="onItemClick(n)"
       >
         <span class="notif-icon">{{ typeIcon(n.type) }}</span>
         <div class="notif-body">

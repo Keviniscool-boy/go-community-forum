@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// 问题详情页：问题正文 + 关注 + 回答列表（投票/收藏/评论）+ 回答编辑器
-import { ref, onMounted, computed } from 'vue'
+// 问题详情页：问题正文 + 关注 + 回答列表（投票/收藏/楼中楼评论）+ 回答编辑器
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { View as ViewIcon, CaretTop, Star, ChatDotRound } from '@element-plus/icons-vue'
+import { View as ViewIcon, CaretTop, Star } from '@element-plus/icons-vue'
 import { fetchQuestionDetail, fetchAnswers, createAnswer, updateQuestion, deleteQuestion, updateAnswer, deleteAnswer, acceptAnswer, unacceptAnswer, setQuestionStatus, type QuestionDetail, type AnswerDetail } from '@/api/question'
-import { voteAnswer, collectAnswer, uncollectAnswer, followQuestion, unfollowQuestion, fetchQuestionInteractions, fetchAnswerInteractions, fetchComments, createComment, type CommentDetail } from '@/api/interaction'
+import { voteAnswer, collectAnswer, uncollectAnswer, followQuestion, unfollowQuestion, fetchQuestionInteractions, fetchAnswerInteractions } from '@/api/interaction'
 import { followUser, unfollowUser } from '@/api/interaction'
 import { addBookmarkItem, listFolders, createFolder, type BookmarkFolder } from '@/api/productivity'
 import { createReport } from '@/api/productivity'
@@ -15,6 +15,7 @@ import { ApiError } from '@/api/http'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import CommentSection from '@/components/CommentSection.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,13 +44,16 @@ const answerCount = computed(() => question.value?.answer_count ?? answers.value
 const voteMap = ref<Record<string, number>>({})
 const collectMap = ref<Record<string, boolean>>({})
 
-// 问题评论
-const comments = ref<CommentDetail[]>([])
-const commentLoading = ref(false)
-const commentsFinished = ref(false)
-const commentCursor = ref('')
-const commentInput = ref('')
-const commentSubmitting = ref(false)
+// 评论：问题与每条回答各有一个评论区（CommentSection），这里只持有计数与「展开哪条回答的评论」
+const openCommentsFor = ref('')
+
+function onQuestionCommentsChange(delta: number) {
+  if (question.value) question.value.comment_count = Math.max(0, question.value.comment_count + delta)
+}
+
+function toggleAnswerComments(a: AnswerDetail) {
+  openCommentsFor.value = openCommentsFor.value === a.id ? '' : a.id
+}
 
 // 回答编辑器状态
 const answerContent = ref('')
@@ -145,6 +149,11 @@ async function load() {
   error.value = ''
   try {
     question.value = await fetchQuestionDetail(questionId)
+    // 治理重定向（PRD F8）：A 详情自动跳转到 B
+    if (question.value.redirect_to) {
+      router.replace(`/questions/${question.value.redirect_to}?merged=${questionId}`)
+      return
+    }
     // 登录后拉取互动状态
     if (auth.isLoggedIn) {
       try {
@@ -535,48 +544,6 @@ async function onFollowAuthor() {
   }
 }
 
-// 评论
-async function loadComments(reset = false) {
-  if (commentLoading.value) return
-  if (!reset && commentsFinished.value) return
-  commentLoading.value = true
-  try {
-    if (reset) {
-      commentCursor.value = ''
-      comments.value = []
-    }
-    const res = await fetchComments('question', questionId, commentCursor.value)
-    if (reset) comments.value = []
-    comments.value = [...comments.value, ...res.items]
-    commentCursor.value = res.next_cursor
-    commentsFinished.value = !res.has_more
-  } catch (e) {
-    if (e instanceof ApiError) ElMessage.error(e.message)
-  } finally {
-    commentLoading.value = false
-  }
-}
-
-async function submitComment() {
-  if (!auth.isLoggedIn) {
-    router.push({ name: 'login', query: { redirect: route.fullPath } })
-    return
-  }
-  if (!commentInput.value.trim()) return ElMessage.warning('请输入评论内容')
-  commentSubmitting.value = true
-  try {
-    await createComment('question', questionId, commentInput.value.trim())
-    commentInput.value = ''
-    ElMessage.success('评论已发布')
-    await loadComments(true)
-    if (question.value) question.value.comment_count += 1
-  } catch (e) {
-    if (e instanceof ApiError) ElMessage.error(e.message)
-  } finally {
-    commentSubmitting.value = false
-  }
-}
-
 async function submitAnswer() {
   if (!auth.isLoggedIn) {
     router.push({ name: 'login', query: { redirect: route.fullPath } })
@@ -597,12 +564,24 @@ async function submitAnswer() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   load()
-  loadAnswers(true)
-  loadComments(true)
+  await loadAnswers(true)
   loadMyPendingInvitation()
+  await scrollToHashAnswer()
 })
+
+// 从通知等入口带 #answer-<id> 进入时：定位并短暂高亮对应回答
+async function scrollToHashAnswer() {
+  const hash = route.hash
+  if (!hash) return
+  await nextTick()
+  const el = document.getElementById(hash.slice(1))
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.classList.add('highlight')
+  setTimeout(() => el.classList.remove('highlight'), 2000)
+}
 </script>
 
 <template>
@@ -779,7 +758,7 @@ onMounted(() => {
         <EmptyState text="还没有回答，写下你的答案" />
       </div>
       <template v-else>
-        <article v-for="a in answers" :key="a.id" class="bb-card answer-card" :class="{ 'answer-accepted': a.accepted }">
+        <article v-for="a in answers" :id="`answer-${a.id}`" :key="a.id" class="bb-card answer-card" :class="{ 'answer-accepted': a.accepted }">
           <div class="a-vote">
             <button class="vote-btn" :class="{ active: voteMap[a.id] === 1 }" @click="onVote(a, 1)">
               <el-icon><CaretTop /></el-icon>
@@ -797,7 +776,7 @@ onMounted(() => {
               <button class="footer-btn" :class="{ active: collectMap[a.id] }" @click="onCollect(a)">
                 <el-icon><Star /></el-icon>{{ collectMap[a.id] ? '已收藏' : '收藏' }} · {{ a.collect_count }}
               </button>
-              <!-- 仅提问者可采纳/撤销；closed 状态不显示采纳 -->
+              <!-- 仅提问者可采纳/撤销；closed 状态不显示采纳（frontend-v3） -->
               <template v-if="isQuestionAuthor && !isClosed">
                 <button
                   v-if="a.accepted"
@@ -816,11 +795,25 @@ onMounted(() => {
                   采纳
                 </button>
               </template>
+              <!-- 楼中楼评论区（第四阶段）：默认折叠，点击「评论」时才挂载 -->
+              <button class="footer-btn" :class="{ active: openCommentsFor === a.id }" @click="toggleAnswerComments(a)">
+                {{ openCommentsFor === a.id ? '收起评论' : '评论' }} · {{ a.comment_count }}
+              </button>
               <template v-if="auth.user?.user_id === a.author_id">
                 <button class="footer-btn" @click="openEditAnswer(a)">编辑</button>
                 <button class="footer-btn danger" @click="onDeleteAnswer(a)">删除</button>
               </template>
             </div>
+            <!-- 回答下的楼中楼评论区：默认折叠，点击「评论」时才挂载 -->
+            <CommentSection
+              v-if="openCommentsFor === a.id"
+              class="a-comments"
+              target-type="answer"
+              :target-id="a.id"
+              :total="a.comment_count"
+              compact
+              @change="a.comment_count = Math.max(0, a.comment_count + $event)"
+            />
           </div>
         </article>
         <div class="load-more">
@@ -832,27 +825,12 @@ onMounted(() => {
 
       <!-- 问题评论 -->
       <div class="bb-card comments-card">
-        <h3 class="comments-title"><el-icon><ChatDotRound /></el-icon>{{ question.comment_count }} 条评论</h3>
-        <div class="comment-input-row">
-          <el-input
-            v-model="commentInput"
-            placeholder="写下你的评论…"
-            @keyup.enter="submitComment"
-          />
-          <el-button type="primary" :loading="commentSubmitting" @click="submitComment">发送</el-button>
-        </div>
-        <div v-if="commentLoading && comments.length === 0" class="comment-loading"><LoadingState text="加载评论中…" /></div>
-        <div v-else-if="comments.length === 0" class="comments-empty">还没有评论</div>
-        <ul v-else class="comment-list">
-          <li v-for="cm in comments" :key="cm.id" class="comment-item">
-            <span class="comment-user">{{ cm.username }}</span>
-            <span class="comment-content">{{ cm.content }}</span>
-            <span class="comment-time">{{ cm.create_time?.slice(0, 10) }}</span>
-          </li>
-        </ul>
-        <el-button v-if="!commentsFinished" text size="small" :loading="commentLoading" @click="loadComments()">
-          加载更多评论
-        </el-button>
+        <CommentSection
+          target-type="question"
+          :target-id="questionId"
+          :total="question.comment_count"
+          @change="onQuestionCommentsChange"
+        />
       </div>
 
         <el-dialog v-model="editAnswerDialogVisible" title="编辑回答" width="90%" style="max-width: 640px">
@@ -1197,60 +1175,16 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
-.comments-title {
-  margin: 0 0 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 16px;
+// 通知跳转定位到的回答：短暂高亮
+.answer-card.highlight {
+  box-shadow: 0 0 0 2px var(--bb-primary);
+  transition: box-shadow 0.3s;
 }
 
-.comment-input-row {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.comments-empty {
-  color: var(--bb-text-tertiary);
-  font-size: 13px;
-  padding: 8px 0 16px;
-}
-
-.comment-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.comment-item {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--bb-border);
-  font-size: 14px;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.comment-user {
-  font-weight: 600;
-  color: var(--bb-text-secondary);
-  flex-shrink: 0;
-}
-
-.comment-content {
-  color: var(--bb-text-main);
-  flex: 1;
-}
-
-.comment-time {
-  color: var(--bb-text-tertiary);
-  font-size: 12px;
-  flex-shrink: 0;
-}
-
-.comment-loading {
-  padding: 8px 0;
+.a-comments {
+  margin-top: 8px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--bb-border);
 }
 
 .load-more {

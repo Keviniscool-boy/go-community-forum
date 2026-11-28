@@ -2,8 +2,9 @@
 // 用户主页：基本信息、内容统计、关注按钮、提问与回答列表
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { fetchUserProfile, fetchUserQuestions, fetchUserAnswers, fetchUserArticles, fetchUserColumns, type UserProfile } from '@/api/user'
+import { blockUser, unblockUser, fetchUserInteractions } from '@/api/social'
 import { followUser, unfollowUser } from '@/api/interaction'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/api/http'
@@ -37,6 +38,41 @@ const defaultAvatar = computed(
 )
 
 const isSelf = computed(() => auth.user?.user_id === userId)
+
+// 拉黑/取消拉黑（PRD F2）：与目标用户的互动状态在加载时获取
+const isBlocked = ref(false)
+
+async function loadInteractions() {
+  if (!auth.isLoggedIn || isSelf.value) return
+  try {
+    const st = await fetchUserInteractions(userId)
+    isBlocked.value = st.is_blocked
+  } catch {
+    // 忽略
+  }
+}
+
+function onMessage() {
+  router.push({ name: 'chat', params: { id: 'new:' + userId } })
+}
+
+async function onToggleBlock() {
+  try {
+    if (isBlocked.value) {
+      await unblockUser(userId)
+      isBlocked.value = false
+      ElMessage.success('已取消拉黑')
+    } else {
+      await ElMessageBox.confirm('拉黑后你们互相不可见、无法关注和私信，确定拉黑？', '拉黑用户', { type: 'warning' })
+      await blockUser(userId)
+      isBlocked.value = true
+      ElMessage.success('已拉黑')
+    }
+    await load()
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  }
+}
 
 async function load() {
   loading.value = true
@@ -98,7 +134,10 @@ async function onFollow() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadInteractions()
+})
 </script>
 
 <template>
@@ -115,8 +154,12 @@ onMounted(load)
           <h2 class="profile-name">{{ profile.username }}</h2>
           <p class="profile-bio">{{ profile.bio || '这个人很懒，什么都没写' }}</p>
           <div class="profile-stats">
-            <span><strong>{{ profile.follower_count }}</strong> 关注者</span>
-            <span><strong>{{ profile.following_count }}</strong> 关注了</span>
+            <router-link class="stat-link" :to="`/users/${userId}/followers`">
+              <strong>{{ profile.follower_count }}</strong> 关注者
+            </router-link>
+            <router-link class="stat-link" :to="`/users/${userId}/following`">
+              <strong>{{ profile.following_count }}</strong> 关注了
+            </router-link>
             <span><strong>{{ profile.question_count }}</strong> 提问</span>
             <span><strong>{{ profile.answer_count }}</strong> 回答</span>
           </div>
@@ -129,6 +172,12 @@ onMounted(load)
             @click="onFollow"
           >
             {{ profile.is_following ? '已关注' : '+ 关注' }}
+          </el-button>
+          <el-button v-if="!isSelf && !isBlocked" size="round" plain @click="onMessage">
+            私信
+          </el-button>
+          <el-button v-if="!isSelf" size="round" plain :type="isBlocked ? 'danger' : 'default'" @click="onToggleBlock">
+            {{ isBlocked ? '已拉黑' : '拉黑' }}
           </el-button>
         </div>
       </div>
@@ -210,6 +259,15 @@ onMounted(load)
   margin: 6px 0;
   color: var(--bb-text-secondary);
   font-size: 14px;
+}
+
+.stat-link {
+  color: var(--bb-text-tertiary);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--bb-primary);
+  }
 }
 
 .profile-stats {

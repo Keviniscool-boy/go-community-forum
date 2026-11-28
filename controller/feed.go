@@ -34,9 +34,9 @@ func GetFeedHandler(c *gin.Context) {
 	case "recommend":
 		data, err = logic.GetRecommendFeed(tryGetUserID(c), cursor, limit)
 	case "latest":
-		data, err = logic.GetLatestFeed(cursor, limit)
+		data, err = logic.GetLatestFeed(tryGetUserID(c), cursor, limit)
 	case "hot":
-		data, err = logic.GetHotFeed(cursor, limit)
+		data, err = logic.GetHotFeed(tryGetUserID(c), cursor, limit)
 	case "following":
 		userID, e := getCurrentUserID(c)
 		if e != nil {

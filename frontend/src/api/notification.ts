@@ -6,14 +6,14 @@ export interface NotificationDetail {
   id: string
   actor_id: string
   actor_name: string
-  type: number // 1 赞同 2 评论 3 关注 4 收藏 6 采纳 8 新回答 9 邀请回答 10/11 邀请响应
-  target_type: number
-  target_id: string
+  type: number // 1 赞同 2 评论 3 关注 4 收藏 5 私信 6 采纳 7 撤销采纳 8 新回答 9 邀请回答 10/11 邀请响应 12 赞同评论 13 回复评论
+  target_type: number // 1 回答 2 问题 3 文章 0 用户
+  target_id: string // 目标为回答时是回答 ID
+  question_id?: string // 跳转用：回答类为所属问题 ID；邀请类（type 9）为问题 ID
   is_read: boolean
   create_time: string
   excerpt: string
   agg_count?: number // 聚合条数（>1 时显示"某某等 N 人"）
-  question_id?: string // 邀请类通知（type 9）跳转用
 }
 
 export function fetchNotifications(cursor = '', limit = 20) {
@@ -64,4 +64,9 @@ export function followTopic(id: string) {
 
 export function unfollowTopic(id: string) {
   return http.delete<null>(`topics/${id}/follow`)
+}
+
+// 通知单条已读（第五阶段 F3；幂等）
+export function markNotificationRead(notificationId: string) {
+  return http.patch<null>(`notifications/${notificationId}/read`)
 }

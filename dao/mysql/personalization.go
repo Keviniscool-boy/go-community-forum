@@ -190,9 +190,6 @@ func ListRecommendationFeedback(userID int64, limit int) (rows []map[string]inte
 
 // BlockUser 屏蔽作者（幂等；禁止自屏蔽）
 func BlockUser(blockerID, blockedID int64) error {
-	if blockerID == blockedID {
-		return ErrCannotBlockSelf
-	}
 	tx, err := db.Beginx()
 	if err != nil {
 		return err
@@ -201,10 +198,9 @@ func BlockUser(blockerID, blockedID int64) error {
 	if _, err = tx.Exec("INSERT IGNORE INTO user_block (blocker_id, blocked_id) VALUES (?, ?)", blockerID, blockedID); err != nil {
 		return err
 	}
-	// 双方建立屏蔽：两人之间的待处理回答邀请立即失效（PRD §9，同事务）
+	// 自动解除双向关注（PRD F2：拉黑瞬间；问题关注不受影响）
 	if _, err = tx.Exec(
-		"UPDATE question_answer_invitation SET status = 5 WHERE status = 0 AND "+
-			"((inviter_id = ? AND invitee_id = ?) OR (inviter_id = ? AND invitee_id = ?))",
+		"DELETE FROM user_follow WHERE (follower_id = ? AND following_id = ?) OR (follower_id = ? AND following_id = ?)",
 		blockerID, blockedID, blockedID, blockerID); err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -66,7 +67,11 @@ func GetDB() *sqlx.DB {
 	return db
 }
 
-// setGlobalDB 内部使用（migrate_test.go / logic 集成测试经 SetGlobalDB 调用）
+// SetGlobalDB / GetGlobalDB 供跨包集成测试与只读批查使用（写路径一律走 DAO 函数）
+func SetGlobalDB(d *sqlx.DB) { setGlobalDB(d) }
+
+func GetGlobalDB() *sqlx.DB { return db }
+
 func setGlobalDB(d *sqlx.DB) {
 	db = d
 }
@@ -84,12 +89,23 @@ func LatestMigrationVersion(ctx context.Context) (int, error) {
 	return v, err
 }
 
-// SetGlobalDB 测试与运维工具用：替换全局数据库连接（导出别名，复用 setGlobalDB）
-// GetGlobalDB 返回全局连接（只读批查场景使用；写路径一律走 DAO 函数）
-func GetGlobalDB() *sqlx.DB {
-	return db
+// TxLike 事务句柄的最小接口（*sqlx.Tx 满足；便于跨 DAO 组合事务）
+type TxLike interface {
+	Get(dest interface{}, query string, args ...interface{}) error
+	QueryRow(query string, args ...interface{}) *sql.Row
+	Exec(query string, args ...interface{}) (sql.Result, error)
 }
 
-func SetGlobalDB(d *sqlx.DB) {
-	setGlobalDB(d)
+// WithTx 在单事务内执行 fn：成功提交，失败回滚并返回错误
+func WithTx(fn func(tx TxLike) error) error {
+	tx, err := db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	handle := TxLike(tx)
+	if err = fn(handle); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

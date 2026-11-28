@@ -63,7 +63,8 @@ func GetQuestionPublicByID(id int64, viewerID int64) (q *models.Question, err er
 		      FROM question q JOIN user u ON u.user_id = q.author_id AND u.status = 1
 		      WHERE q.question_id = ? AND q.status = 1
 		      AND q.moderation_status = 1 AND q.deleted_at IS NULL
-		      AND (q.visibility = 1 OR (q.visibility = 2 AND q.author_id = ?))`
+		      AND (q.visibility = 1 OR (q.visibility = 2 AND q.author_id = ?))` +
+		FilterBlockViewerSQL(viewerID, "q.author_id")
 	if err = db.Get(q, sqlStr, id, viewerID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrQuestionNotExist
@@ -71,6 +72,55 @@ func GetQuestionPublicByID(id int64, viewerID int64) (q *models.Question, err er
 		return nil, err
 	}
 	return q, nil
+}
+
+// SetQuestionRedirect 治理重定向（PRD F8）：A → targetID；targetID=0 清除（可逆）
+func SetQuestionRedirect(questionID, targetID int64, operatorID int64) error {
+	if targetID == 0 {
+		_, err := db.Exec("UPDATE question SET redirect_to = NULL WHERE question_id = ?", questionID)
+		return err
+	}
+	_, err := db.Exec("UPDATE question SET redirect_to = ? WHERE question_id = ?", targetID, questionID)
+	return err
+}
+
+// ValidateRedirectTarget 校验重定向目标：存在、公开、非自身、不成环（沿链最多 5 跳）
+func ValidateRedirectTarget(questionID, targetID int64) error {
+	if questionID == targetID {
+		return ErrInvalidParams
+	}
+	var n int
+	if err := db.Get(&n, "SELECT COUNT(*) FROM question WHERE question_id = ? AND status = 1 AND moderation_status = 1 AND deleted_at IS NULL", targetID); err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrQuestionNotExist
+	}
+	cur := targetID
+	for i := 0; i < 5; i++ {
+		if cur == questionID {
+			return ErrInvalidParams
+		}
+		var next sql.NullInt64
+		if err := db.Get(&next, "SELECT redirect_to FROM question WHERE question_id = ?", cur); err != nil {
+			return nil
+		}
+		if !next.Valid || next.Int64 == 0 {
+			return nil
+		}
+		cur = next.Int64
+	}
+	return ErrInvalidParams
+}
+
+// QuestionRedirected 是否已被治理重定向
+func QuestionRedirected(questionID int64) (int64, bool, error) {
+	var target sql.NullInt64
+	err := db.Get(&target, "SELECT redirect_to FROM question WHERE question_id = ?", questionID)
+	if err != nil {
+		return 0, false, err
+	}
+	return target.Int64, target.Valid, nil
 }
 
 // GetQuestionTopics 查询问题关联的话题列表

@@ -5,15 +5,15 @@ package controller
 type ResCode int64
 
 const (
-	CodeSuccess           ResCode = 1000
-	CodeInvalidParams     ResCode = 1001
-	CodeUserExist         ResCode = 1002
-	CodeUserNotExist      ResCode = 1003
+	CodeSuccess            ResCode = 1000
+	CodeInvalidParams      ResCode = 1001
+	CodeUserExist          ResCode = 1002
+	CodeUserNotExist       ResCode = 1003
 	CodeInvalidCredentials ResCode = 1004
-	CodePasswordMismatch  ResCode = 1005
-	CodeServerBusy        ResCode = 1006
-	CodePostNotExist      ResCode = 1007
-	CodeCommunityNotExist ResCode = 1008
+	CodePasswordMismatch   ResCode = 1005
+	CodeServerBusy         ResCode = 1006
+	CodePostNotExist       ResCode = 1007
+	CodeCommunityNotExist  ResCode = 1008
 
 	CodeInvalidAuth ResCode = 1009
 	CodeNeedLogin   ResCode = 1010
@@ -31,8 +31,8 @@ const (
 	CodeAnswerNotExist   ResCode = 1019
 	CodeTopicExist       ResCode = 1020
 
-	CodeRegisterFailed  ResCode = 1021
-	CodeSendCodeFailed  ResCode = 1022
+	CodeRegisterFailed   ResCode = 1021
+	CodeSendCodeFailed   ResCode = 1022
 	CodeVerifyCodeLocked ResCode = 1023
 
 	CodeFeedRefreshing ResCode = 1024
@@ -57,6 +57,7 @@ const (
 	CodeQuestionTransition    ResCode = 1044
 	CodeInvitationLimit       ResCode = 1045
 	CodeInvitationState       ResCode = 1046
+	CodeCommentNotExist       ResCode = 1047
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -105,6 +106,7 @@ var codeMsgMap = map[ResCode]string{
 	CodeQuestionTransition:    "该状态转换不允许（solved 由采纳操作维护）",
 	CodeInvitationLimit:       "邀请数已达上限",
 	CodeInvitationState:       "邀请已处理或已失效",
+	CodeCommentNotExist:       "评论不存在或已被删除",
 }
 
 // 创建一个函数，传入code返回msg

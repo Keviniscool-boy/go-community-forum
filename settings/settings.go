@@ -29,6 +29,8 @@ func Init() error {
 	// 全局限流默认值（PRD §9：频控服务端执行且可配置；默认 2s 补 1、桶 100）
 	viper.SetDefault("app.rate_limit_fill_seconds", 2)
 	viper.SetDefault("app.rate_limit_capacity", 100)
+	// 评论编辑窗口（第五阶段 PRD F4，秒）
+	viper.SetDefault("comment.edit_window", 300)
 
 	viper.SetConfigName("config")     // 配置文件名称 不需要带后缀
 	viper.SetConfigType("yaml")       // 配置文件类型

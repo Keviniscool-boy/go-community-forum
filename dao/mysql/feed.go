@@ -116,12 +116,14 @@ type FollowingFeedPageParams struct {
 	CursorType string
 	CursorID   int64
 	Limit      int
+	ViewerID   int64 // 拉黑过滤（PRD F2；0 = 游客不过滤）
 }
 
 // FollowingFeedPage 关注 Feed 多来源（规格 4.2）：
-//   作者关注 → 问题/回答/文章；话题关注 → 问题；专栏关注 → 文章。
-//   同段用 OR 合并（单行不重复），跨段类型不同无重复；屏蔽与治理过滤在段外由调用方执行。
-//   参数顺序与 SQL 占位符严格对应。
+//
+//	作者关注 → 问题/回答/文章；话题关注 → 问题；专栏关注 → 文章。
+//	同段用 OR 合并（单行不重复），跨段类型不同无重复；屏蔽与治理过滤在段外由调用方执行。
+//	参数顺序与 SQL 占位符严格对应。
 func FollowingFeedPage(p *FollowingFeedPageParams) (rows []*FeedRow, err error) {
 	limit := p.Limit
 	hasCursor := p.CursorID > 0

@@ -19,9 +19,9 @@ import (
 // 空库（全量建表）、Compose 基线库、旧生产库升级走同一条链。
 
 const (
-	migrationLockKey   = "bluebell_migration"
-	migrationLockWait  = 5 * time.Second
-	migrationLockTTL   = 120 // 秒，防止持锁实例崩溃后锁泄漏
+	migrationLockKey  = "bluebell_migration"
+	migrationLockWait = 5 * time.Second
+	migrationLockTTL  = 120 // 秒，防止持锁实例崩溃后锁泄漏
 )
 
 type migrationFile struct {
@@ -32,13 +32,8 @@ type migrationFile struct {
 
 // RunMigrations 执行未应用的迁移（是否调用由 main 依据 mysql.auto_migrate 配置决定）
 func RunMigrations() error {
-	// 版本表
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
-		version INT NOT NULL PRIMARY KEY,
-		name VARCHAR(255) NOT NULL,
-		applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
-		return fmt.Errorf("create schema_migrations failed: %w", err)
+	if err := ensureMigrationTable(); err != nil {
+		return err
 	}
 
 	// 获取迁移锁，未拿到说明另一实例正在执行，直接跳过（不视为错误）
@@ -73,6 +68,18 @@ func RunMigrations() error {
 			return fmt.Errorf("apply migration %03d_%s failed: %w", m.Version, m.Name, err)
 		}
 		zap.L().Info("migration applied", zap.Int("version", m.Version), zap.String("name", m.Name))
+	}
+	return nil
+}
+
+// ensureMigrationTable 创建迁移版本表（幂等）
+func ensureMigrationTable() error {
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+		version INT NOT NULL PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); err != nil {
+		return fmt.Errorf("create schema_migrations failed: %w", err)
 	}
 	return nil
 }

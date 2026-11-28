@@ -55,7 +55,17 @@ func ListNotifications(userID int64, cursor string, limit int, typeFilter string
 	// 邀请/新回答类通知（8-11）：批量关联问题标题与跳转 question_id
 	// type 8 target=question；type 9 target=invitation（需解析 question_id）；type 10/11 target=question
 	qInfo := loadQuestionInfoForNotifications(ns)
-
+	// 回答类通知的 target_id 是回答 ID，补查所属问题 ID 供前端跳转（main 第四阶段；批量避免 N+1）
+	answerIDs := make([]int64, 0, len(ns))
+	for _, n := range ns {
+		if n.TargetType == models.TargetAnswer {
+			answerIDs = append(answerIDs, n.TargetID)
+		}
+	}
+	questionIDs, qerr := mysql.AnswerQuestionIDs(answerIDs)
+	if qerr != nil {
+		return nil, qerr
+	}
 	// 展示层聚合（规格 10.1）：同批次内 type=赞同 且目标相同的通知合并为"某某等 N 人"，
 	// 不改变原始记录与审计事实；跨页不聚合
 	items := make([]*models.ApiNotificationDetail, 0, len(ns))
@@ -92,6 +102,9 @@ func ListNotifications(userID int64, cursor string, limit int, typeFilter string
 		if u := actorMap[n.ActorID]; u != nil {
 			detail.ActorName = u.Username
 		}
+		if qid, ok := questionIDs[n.TargetID]; ok {
+			detail.QuestionID = strconv.FormatInt(qid, 10)
+		}
 		items = append(items, detail)
 	}
 	next := ""
@@ -121,13 +134,17 @@ func notifyText(t int32) string {
 	case models.NotifyTypeUnaccept:
 		return "撤销了对你回答的采纳"
 	case models.NotifyTypeNewAnswer:
-		return "回答了你的问题" // 关注者场景由详情构造改为"回答了你关注的问题"
+		return "回答了你的问题"
 	case models.NotifyTypeAnswerInvite:
 		return "邀请你回答"
 	case models.NotifyTypeInviteAccepted:
 		return "接受了你的回答邀请"
 	case models.NotifyTypeInviteDeclined:
 		return "婉拒了你的回答邀请"
+	case models.NotifyTypeCommentLike:
+		return "赞同了你的评论"
+	case models.NotifyTypeReply:
+		return "回复了你的评论"
 	}
 	return "与你互动"
 }
@@ -160,6 +177,12 @@ type ApiUserProfile struct {
 // GetUserProfile 用户主页：基本信息 + 内容统计 + 关注关系
 // 被禁用账号统一按不存在处理（防枚举，与内容可见策略一致）
 func GetUserProfile(targetID int64, viewerID int64) (*ApiUserProfile, error) {
+	// 双向屏蔽统一按不存在处理（PRD F2 内容可见性；防关系探测）
+	if viewerID > 0 && viewerID != targetID {
+		if blocked, berr := mysql.IsBlockedBetween(targetID, viewerID); berr == nil && blocked {
+			return nil, mysql.ErrUserNotExist
+		}
+	}
 	user, err := mysql.GetUserDetailByID(targetID)
 	if err != nil {
 		return nil, err

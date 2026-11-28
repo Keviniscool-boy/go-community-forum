@@ -11,6 +11,40 @@ import ErrorState from '@/components/ErrorState.vue'
 const route = useRoute()
 const router = useRouter()
 
+// 搜索历史（PRD F9）：localStorage 最近 10 条，聚焦下拉、逐条删除、清空
+const HISTORY_KEY = 'bb_search_history'
+const history = ref<string[]>([])
+const historyOpen = ref(false)
+try {
+  history.value = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
+} catch {
+  history.value = []
+}
+
+function saveHistory(kw: string) {
+  if (!kw) return
+  const next = [kw, ...history.value.filter((h) => h !== kw)].slice(0, 10)
+  history.value = next
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
+}
+
+function removeHistory(kw: string) {
+  history.value = history.value.filter((h) => h !== kw)
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.value))
+}
+
+function clearHistory() {
+  history.value = []
+  localStorage.removeItem(HISTORY_KEY)
+  historyOpen.value = false
+}
+
+function useHistory(kw: string) {
+  keyword.value = kw
+  historyOpen.value = false
+  submit()
+}
+
 const keyword = ref((route.query.q as string) || '')
 const scope = ref(asScope(route.query.scope))
 const sort = ref(asSort(route.query.sort))
@@ -108,6 +142,8 @@ onMounted(() => {
 
 function submit() {
   syncUrl()
+  saveHistory(keyword.value.trim())
+  historyOpen.value = false
   load(true)
 }
 </script>
@@ -115,12 +151,26 @@ function submit() {
 <template>
   <div class="search-view">
     <div class="bb-card search-bar">
-      <el-input
-        v-model="keyword"
-        size="large"
-        placeholder="搜索问题、回答、文章、专栏、用户、话题…"
-        @keyup.enter="submit"
-      />
+      <div class="search-input-wrap">
+        <el-input
+          v-model="keyword"
+          size="large"
+          placeholder="搜索问题、回答、文章、专栏、用户、话题…"
+          @keyup.enter="submit"
+          @focus="historyOpen = history.length > 0"
+          @blur="historyOpen = false"
+        />
+        <div v-if="historyOpen && history.length" class="history-dropdown">
+          <div class="history-head">
+            <span>搜索历史</span>
+            <button class="history-clear" type="button" @mousedown.prevent="clearHistory">清空</button>
+          </div>
+          <div v-for="h in history" :key="h" class="history-item" @mousedown.prevent="useHistory(h)">
+            <span class="history-kw">{{ h }}</span>
+            <button class="history-del" type="button" @mousedown.stop.prevent="removeHistory(h)">×</button>
+          </div>
+        </div>
+      </div>
       <el-button type="primary" size="large" :loading="loading" @click="submit">搜索</el-button>
     </div>
 
@@ -165,6 +215,62 @@ function submit() {
 </template>
 
 <style scoped lang="less">
+.search-input-wrap {
+  position: relative;
+  flex: 1;
+}
+
+.history-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: #fff;
+  border: 1px solid var(--bb-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: 6px 0;
+}
+
+.history-head {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 12px;
+  color: var(--bb-text-tertiary);
+  font-size: 12px;
+}
+
+.history-clear {
+  border: none;
+  background: transparent;
+  color: var(--bb-primary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--bb-text-main);
+
+  &:hover {
+    background: var(--bb-bg-page);
+  }
+}
+
+.history-del {
+  border: none;
+  background: transparent;
+  color: var(--bb-text-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+}
+
 .search-bar {
   display: flex;
   gap: 12px;

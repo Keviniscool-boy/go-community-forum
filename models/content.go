@@ -18,6 +18,7 @@ type Question struct {
 	AcceptedAnswerID int64     `json:"accepted_answer_id,string" db:"accepted_answer_id"`
 	CreateTime       time.Time `json:"create_time" db:"create_time"`
 	UpdateTime       time.Time `json:"update_time" db:"update_time"`
+	RedirectTo       *int64    `json:"redirect_to,omitempty" db:"redirect_to"` // 治理合并目标（PRD F8）
 }
 
 // 问题解决状态（业务状态，独立于审核/删除状态）
@@ -158,4 +159,10 @@ type ParamUpdateProfile struct {
 	Username  string `json:"username" binding:"omitempty,min=2,max=32"`
 	Bio       string `json:"bio" binding:"max=500"`
 	AvatarURL string `json:"avatar_url" binding:"max=500"`
+}
+
+// ParamQuestionRedirect 问题重定向请求（PRD F8）
+type ParamQuestionRedirect struct {
+	TargetID string `json:"target_id" binding:"required,min=1"`
+	Note     string `json:"note" binding:"max=500"`
 }

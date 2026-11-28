@@ -10,9 +10,9 @@ import (
 	"bluebell/models"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/viper"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	"github.com/spf13/viper"
 	"time"
 )
 
@@ -43,6 +43,8 @@ func Setup() *gin.Engine {
 	auth.POST("/password/reset/verify", controller.VerifyResetCodeHandler)
 	auth.POST("/password/reset", controller.ResetWithTokenHandler)
 	auth.PUT("/profile", middlewares.JWTAuthMiddleware(), controller.UpdateProfileHandler)
+	auth.GET("/notify-settings", middlewares.JWTAuthMiddleware(), controller.GetNotifySettingsHandler)
+	auth.PUT("/notify-settings", middlewares.JWTAuthMiddleware(), controller.SetNotifySettingsHandler)
 	auth.GET("/me", middlewares.JWTAuthMiddleware(), controller.MeHandler)
 	auth.POST("/logout-all", middlewares.JWTAuthMiddleware(), controller.LogoutAllHandler)
 	auth.POST("/email/bind", middlewares.JWTAuthMiddleware(), controller.BindEmailHandler)
@@ -95,15 +97,47 @@ func Setup() *gin.Engine {
 
 	// 评论相关路由
 	v1.POST("/comments", middlewares.JWTAuthMiddleware(), controller.CreateCommentHandler)
-	v1.GET("/comments", controller.ListCommentsHandler)
+	// 评论：列表与回复均「可选登录」——登录后返回点赞状态与删除权限，游客照常可读
+	v1.GET("/comments", middlewares.OptionalAuthMiddleware(), controller.ListCommentsHandler)
+	// 评论体系补全：楼中楼回复、点赞、删除（回复列表可选登录，用于返回点赞状态与删除权限）
+	v1.GET("/comments/:id/replies", middlewares.OptionalAuthMiddleware(), controller.ListCommentRepliesHandler)
+	v1.POST("/comments/:id/like", middlewares.JWTAuthMiddleware(), controller.LikeCommentHandler)
+	v1.DELETE("/comments/:id/like", middlewares.JWTAuthMiddleware(), controller.UnlikeCommentHandler)
+	v1.PATCH("/comments/:id", middlewares.JWTAuthMiddleware(), controller.EditCommentHandler)
+	v1.DELETE("/comments/:id", middlewares.JWTAuthMiddleware(), controller.DeleteCommentHandler)
 
-	// 通知相关路由
+	// 私信（frontend-v3 完整版：会话状态机 + 隐私策略 + 冷却 + 幂等）
+	dm := v1.Group("/conversations")
+	dm.Use(middlewares.JWTAuthMiddleware())
+	{
+		dm.POST("", controller.StartConversationHandler)
+		dm.GET("", controller.ListConversationsHandler)
+		dm.POST("/:id/accept", controller.AcceptConversationHandler)
+		dm.POST("/:id/decline", controller.DeclineConversationHandler)
+		dm.POST("/:id/close", controller.CloseConversationHandler)
+		dm.POST("/:id/hide", controller.HideConversationHandler)
+		dm.GET("/:id/messages", controller.ListMessagesHandler)
+		dm.POST("/:id/messages", controller.SendMessageHandler)
+		dm.POST("/:id/read", controller.MarkConversationReadHandler)
+	}
+	v1.POST("/messages/:id/report", middlewares.JWTAuthMiddleware(), controller.ReportMessageHandler)
+	v1.GET("/me/message-settings", middlewares.JWTAuthMiddleware(), controller.GetPrivacySettingsHandler)
+	v1.PUT("/me/message-settings", middlewares.JWTAuthMiddleware(), controller.PutPrivacySettingsHandler)
+
 	v1.GET("/notifications", middlewares.JWTAuthMiddleware(), controller.ListNotificationsHandler)
+	v1.PATCH("/notifications/:id/read", middlewares.JWTAuthMiddleware(), controller.MarkNotificationReadHandler)
 	v1.GET("/notifications/unread-count", middlewares.JWTAuthMiddleware(), controller.UnreadCountHandler)
 	v1.POST("/notifications/read-all", middlewares.JWTAuthMiddleware(), controller.MarkAllNotificationsReadHandler)
 
 	// 用户主页路由
 	v1.GET("/users/:id", controller.GetUserProfileHandler)
+	// 第五阶段 M1：关注/粉丝列表（静态段注册在 :id 之后不影响——Gin 静态优先）
+	v1.GET("/users/:id/followers", controller.ListUserFollowersHandler)
+	v1.GET("/users/:id/following", controller.ListUserFollowingHandler)
+	v1.GET("/users/:id/interactions", middlewares.JWTAuthMiddleware(), controller.GetUserInteractionsHandler)
+	v1.POST("/users/:id/block", middlewares.JWTAuthMiddleware(), controller.BlockUserHandler)
+	v1.DELETE("/users/:id/block", middlewares.JWTAuthMiddleware(), controller.UnblockUserHandler)
+	v1.GET("/users/blocks", middlewares.JWTAuthMiddleware(), controller.ListUserBlocksHandler)
 	v1.GET("/users/:id/questions", controller.ListUserQuestionsHandler)
 	v1.GET("/users/:id/answers", controller.ListUserAnswersHandler)
 	v1.GET("/users/:id/articles", controller.ListUserArticlesHandler)
@@ -199,20 +233,7 @@ func Setup() *gin.Engine {
 	v1.DELETE("/history", middlewares.JWTAuthMiddleware(), controller.ClearHistoryHandler)
 	v1.POST("/views", middlewares.JWTAuthMiddleware(), controller.RecordViewHandler)
 
-	// 私信（全部需登录）
-	dm := v1.Group("/conversations")
-	dm.Use(middlewares.JWTAuthMiddleware())
-	{
-		dm.POST("", controller.StartConversationHandler)
-		dm.GET("", controller.ListConversationsHandler)
-		dm.POST("/:id/accept", controller.AcceptConversationHandler)
-		dm.POST("/:id/decline", controller.DeclineConversationHandler)
-		dm.POST("/:id/close", controller.CloseConversationHandler)
-		dm.POST("/:id/hide", controller.HideConversationHandler)
-		dm.GET("/:id/messages", controller.ListMessagesHandler)
-		dm.POST("/:id/messages", controller.SendMessageHandler)
-		dm.POST("/:id/read", controller.MarkConversationReadHandler)
-	}
+	// 私信（全部需登录）：路由已在上方 dm 组注册
 	v1.POST("/messages/:id/report", middlewares.JWTAuthMiddleware(), controller.ReportMessageHandler)
 	v1.DELETE("/me/account", middlewares.JWTAuthMiddleware(), controller.DeleteAccountHandler)
 	v1.GET("/me/message-settings", middlewares.JWTAuthMiddleware(), controller.GetPrivacySettingsHandler)
@@ -240,6 +261,9 @@ func Setup() *gin.Engine {
 	adminOnly.Use(middlewares.JWTAuthMiddleware(), middlewares.RequireRoleMiddleware(models.RoleAdmin))
 	{
 		adminOnly.POST("/users/:id/disable", controller.AdminSetUserStatusHandler)
+		// 问题重定向（PRD F8 治理工具；可逆）
+		adminOnly.POST("/questions/:id/redirect", controller.SetQuestionRedirectHandler)
+		adminOnly.DELETE("/questions/:id/redirect", controller.ClearQuestionRedirectHandler)
 	}
 
 	// 创作者中心（登录用户，本人数据）

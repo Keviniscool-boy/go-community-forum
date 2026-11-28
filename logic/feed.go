@@ -254,7 +254,7 @@ func sliceFeedPage(entries []cachedFeedEntry, offset, limit int) (items []*model
 }
 
 // GetHotFeed 热榜（游标绑定缓存快照版本，快照刷新后旧游标返回可重试错误）
-func GetHotFeed(cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
+func GetHotFeed(viewerID int64, cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -265,7 +265,7 @@ func GetHotFeed(cursor string, limit int) (*models.PageResult[*models.FeedItem],
 	if err != nil {
 		return nil, err
 	}
-	items, hasMore := sliceFeedPage(snap.Entries, offset, limit)
+	items, hasMore := sliceFeedPage(filterEntriesByBlocks(snap.Entries, viewerID), offset, limit)
 	next := ""
 	if hasMore {
 		next = encodeOffsetCursor(offset+limit, snap.Version, 0)
@@ -401,6 +401,30 @@ func GetRecommendFeed(userID int64, cursor string, limit int) (*models.PageResul
 	}, nil
 }
 
+// filterEntriesByBlocks 热榜/推荐缓存的读时拉黑过滤（PRD F2）：
+// 快照跨用户共享，过滤只能按 viewer 在读取时做；offset 游标在过滤后的列表上保持一致
+// （同一 viewer 同一快照版本下过滤结果确定）。
+func filterEntriesByBlocks(entries []cachedFeedEntry, viewerID int64) []cachedFeedEntry {
+	if viewerID <= 0 || len(entries) == 0 {
+		return entries
+	}
+	blocked, err := mysql.BlockedIDsFor(viewerID)
+	if err != nil || len(blocked) == 0 {
+		return entries
+	}
+	set := make(map[string]struct{}, len(blocked))
+	for _, id := range blocked {
+		set[strconv.FormatInt(id, 10)] = struct{}{}
+	}
+	out := make([]cachedFeedEntry, 0, len(entries))
+	for _, e := range entries {
+		if _, hit := set[e.Item.Author.UserID]; !hit {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // parseOffsetAndSnapshot 解析 offset 游标并校验快照版本：
 // 游标携带的版本与当前缓存版本不一致时返回 ErrFeedSnapshotExpired（客户端应重刷首页）
 func parseOffsetAndSnapshot(cursor string, userID int64) (int, *cachedFeedSnapshot, error) {
@@ -423,7 +447,7 @@ func parseOffsetAndSnapshot(cursor string, userID int64) (int, *cachedFeedSnapsh
 }
 
 // GetLatestFeed 最新流（时间 + 类型 + id 三字段游标，三类内容统一）
-func GetLatestFeed(cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
+func GetLatestFeed(viewerID int64, cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -453,6 +477,22 @@ func GetLatestFeed(cursor string, limit int) (*models.PageResult[*models.FeedIte
 	items, err := buildFeedItems(rows)
 	if err != nil {
 		return nil, err
+	}
+	// 拉黑过滤（PRD F2）：viewer 拉黑的作者不出现
+	if viewerID > 0 {
+		blockedSet := map[int64]struct{}{}
+		blocked, _ := mysql.BlockedAuthorIDs(viewerID)
+		for _, b := range blocked {
+			blockedSet[b] = struct{}{}
+		}
+		filtered := make([]*models.FeedItem, 0, len(items))
+		for _, it := range items {
+			aid, _ := strconv.ParseInt(it.Author.UserID, 10, 64)
+			if _, bad := blockedSet[aid]; !bad {
+				filtered = append(filtered, it)
+			}
+		}
+		items = filtered
 	}
 	next := ""
 	if hasMore && len(rows) > 0 {

@@ -67,6 +67,7 @@ test('register → login → ask → answer → logout', async ({ page, request 
   await expect(page).toHaveTitle(/登录/)
 })
 
+<<<<<<< HEAD
 test('resolution loop → solved badge → search → my content', async ({ page, request }) => {
   // 双用户 API 造数据：A 提问 → B 回答 → A 采纳 → UI 验证已解决标识/搜索标注/我的内容
   const codeA = '111111'
@@ -123,11 +124,89 @@ test('resolution loop → solved badge → search → my content', async ({ page
   await expect(page.getByText('已解决').first()).toBeVisible({ timeout: 10000 })
 
   // 作者 UI 登录后查看我的内容（问题 Tab 命中且状态公开）
+=======
+test('phase5: follow lists → block → comment edit → DM', async ({ page, request }) => {
+  const codeA = '555555'
+  const codeB = '666666'
+  const emailA = `p5_a_${run}@test.local`
+  const emailB = `p5_b_${run}@test.local`
+  redisInjectRegisterCode(emailA, codeA)
+  redisInjectRegisterCode(emailB, codeB)
+  const bodyA = await apiJson(request, 'post', `${API}/auth/register`, {
+    data: { email: emailA, username: `p5_a_${run}`, password, re_password: password, code: codeA },
+  })
+  const bodyB = await apiJson(request, 'post', `${API}/auth/register`, {
+    data: { email: emailB, username: `p5_b_${run}`, password, re_password: password, code: codeB },
+  })
+  const tokenA = bodyA.data.token
+  const tokenB = bodyB.data.token
+  const uidA = bodyA.data.user.user_id
+  const uidB = bodyB.data.user.user_id
+
+  // B 关注 A；A 提问 + 评论（B 视角）
+  await apiJson(request, 'post', `${API}/users/${uidA}/follow`, { headers: { Authorization: `Bearer ${tokenB}` } })
+  const q = await apiJson(request, 'post', `${API}/questions`, {
+    headers: { Authorization: `Bearer ${tokenA}` },
+    data: { title: `第五阶段 E2E ${run}`, description: '社交与私信验收' },
+  })
+  const qid = q.data.question_id
+  await apiJson(request, 'post', `${API}/comments`, {
+    headers: { Authorization: `Bearer ${tokenB}` },
+    data: { target_type: 'question', target_id: qid, content: `待编辑评论 ${run}` },
+  })
+
+  // 粉丝列表：A 的粉丝含 B
+  const fl = await apiJson(request, 'get', `${API}/users/${uidA}/followers`, {
+    headers: { Authorization: `Bearer ${tokenB}` },
+  })
+  expect(fl.data.items.some((it: { user_id: string }) => it.user_id === uidB)).toBeTruthy()
+
+  // A 拉黑 B → B 关注 A 被拒；A 的评论列表无 B
+  await apiJson(request, 'post', `${API}/users/${uidB}/block`, { headers: { Authorization: `Bearer ${tokenA}` } })
+  const refollow = await apiJson(request, 'post', `${API}/users/${uidA}/follow`, { headers: { Authorization: `Bearer ${tokenB}` } })
+  expect(refollow.code).toBe(1026)
+  const cs = await apiJson(request, 'get', `${API}/comments?target_type=question&target_id=${qid}`, {
+    headers: { Authorization: `Bearer ${tokenA}` },
+  })
+  expect(cs.data.items.some((it: { user_id: string }) => it.user_id === uidB)).toBeFalsy()
+
+  // 取消拉黑 → DM：A 开聊 → B 会话未读 1 → B 回复 → 通知聚合 1 条
+  await apiJson(request, 'delete', `${API}/users/${uidB}/block`, { headers: { Authorization: `Bearer ${tokenA}` } })
+  const open = await apiJson(request, 'post', `${API}/messages/users/${uidB}`, {
+    headers: { Authorization: `Bearer ${tokenA}` },
+    data: { content: `私信验收 ${run}` },
+  })
+  expect(open.data.thread_id).toBeTruthy()
+  const tid = open.data.thread_id
+
+  const threadsB = await apiJson(request, 'get', `${API}/messages/threads`, {
+    headers: { Authorization: `Bearer ${tokenB}` },
+  })
+  const th = threadsB.data.items.find((x: { id: string }) => x.id === tid)
+  expect(th.unread_count).toBe(1)
+
+  const reply = await apiJson(request, 'post', `${API}/messages/threads/${tid}`, {
+    headers: { Authorization: `Bearer ${tokenB}` },
+    data: { content: '收到' },
+  })
+  expect(reply.data.message.content).toBe('收到')
+
+  const notif = await apiJson(request, 'get', `${API}/notifications`, {
+    headers: { Authorization: `Bearer ${tokenB}` },
+  })
+  const dmNotifs = notif.data.items.filter((n: { type: number }) => n.type === 7)
+  expect(dmNotifs.length).toBe(1)
+
+  // UI：375px 会话列表可达
+  const ui = BASE.replace('8081', '8080')
+  await page.setViewportSize({ width: 375, height: 812 })
+>>>>>>> feat/phase5-social-dm
   await page.goto(`${ui}/login`)
   await page.getByPlaceholder('邮箱').fill(emailA)
   await page.getByPlaceholder('密码', { exact: true }).fill(password)
   await page.getByRole('button', { name: '登录' }).click()
   await page.waitForURL(`${ui}/`, { timeout: 10000 })
+<<<<<<< HEAD
   await page.goto(`${ui}/me/content?type=question`)
   await expect(page.getByText(`解决闭环 E2E ${run}`)).toBeVisible({ timeout: 10000 })
   await expect(page.getByText('已解决', { exact: true })).toBeVisible()
@@ -201,4 +280,8 @@ test('invitation loop: invite → accept → answer → answered', async ({ page
     headers: { Authorization: `Bearer ${tokenA}` },
   })
   expect(notifBody.data.items.length).toBeGreaterThanOrEqual(1)
+=======
+  await page.goto(`${ui}/messages`)
+  await expect(page.getByText('p5_b_' + run).first()).toBeVisible({ timeout: 10000 })
+>>>>>>> feat/phase5-social-dm
 })

@@ -23,6 +23,7 @@ export interface QuestionDetail {
   accepted_answer_id: string
   create_time: string
   update_time?: string
+  redirect_to?: string // 治理合并目标（PRD F8）
   topics: TopicBrief[]
 }
 
