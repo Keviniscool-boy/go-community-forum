@@ -96,6 +96,15 @@ func commentVisible(cm *models.Comment) bool {
 	return cm != nil && cm.Status == 1 && cm.ModerationStatus == 1 && !cm.DeletedAt.Valid
 }
 
+// editWindow 评论编辑窗口（秒；配置 comment.edit_window，默认 300）
+func editWindow() time.Duration {
+	w := time.Duration(viper.GetInt("comment.edit_window")) * time.Second
+	if w <= 0 {
+		w = 300 * time.Second
+	}
+	return w
+}
+
 // assembleCommentDetails 批量组装评论详情（作者、被回复人、点赞状态、删除权限）
 // 已删除的占位评论抹掉内容与作者信息，只保留「该评论已删除」语义。
 func assembleCommentDetails(rows []*mysql.CommentRow, viewerID int64, privileged bool) ([]*models.ApiCommentDetail, error) {
@@ -131,6 +140,8 @@ func assembleCommentDetails(rows []*mysql.CommentRow, viewerID int64, privileged
 			ReplyCount: r.ReplyCount,
 			Liked:      liked[r.CommentID],
 			CanDelete:  viewerID > 0 && (r.UserID == viewerID || privileged),
+			CanEdit:    viewerID > 0 && r.UserID == viewerID && !r.DeletedAt.Valid && time.Since(r.CreateTime) <= editWindow(),
+			Edited:     r.UpdateTime.Valid && r.UpdateTime.Time.After(r.CreateTime),
 		}
 		if r.DeletedAt.Valid {
 			detail.IsDeleted = true
@@ -325,10 +336,7 @@ func EditComment(userID int64, commentIDStr string, content string) (*models.Api
 	if cm.Status != 1 || cm.DeletedAt.Valid {
 		return nil, ErrCommentInvalid // 已删除/占位评论不可编辑
 	}
-	window := time.Duration(viper.GetInt("comment.edit_window")) * time.Second
-	if window <= 0 {
-		window = 300 * time.Second // 配置缺失时兜底（settings.Init 正常时已设 300）
-	}
+	window := editWindow()
 	if time.Since(cm.CreateTime) > window {
 		return nil, ErrCommentEditWindow
 	}

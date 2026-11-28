@@ -3,6 +3,10 @@
 import { ref, onMounted } from 'vue'
 import { useNotificationStore } from '@/stores/notification'
 import { useAuthStore } from '@/stores/auth'
+import { markNotificationRead } from '@/api/notification'
+import { ApiError } from '@/api/http'
+import { ElMessage } from 'element-plus'
+
 import { useRouter } from 'vue-router'
 import LoadingState from '@/components/LoadingState.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -46,6 +50,20 @@ function targetLink(n: {
 }
 
 // 1 赞同 2 评论 3 关注 4 收藏 5 赞同评论 6 回复评论
+// 点击通知：先单条已读（PRD F3）再跳转；红点即时消失，未读角标 -1
+async function onItemClick(n: { id: string; is_read: boolean; type: number; target_type: number; target_id: string; actor_id: string; question_id?: string }) {
+  if (!n.is_read) {
+    try {
+      await markNotificationRead(n.id)
+      n.is_read = true
+      if (store.unreadCount > 0) store.unreadCount -= 1
+    } catch (e) {
+      if (e instanceof ApiError) ElMessage.error(e.message)
+    }
+  }
+  router.push(targetLink(n))
+}
+
 const typeIcon = (t: number) =>
   ({ 1: '👍', 2: '💬', 3: '➕', 4: '⭐', 5: '👍', 6: '💬' })[t] || '🔔'
 </script>
@@ -65,7 +83,7 @@ const typeIcon = (t: number) =>
         :key="n.id"
         class="bb-card notif-item"
         :class="{ unread: !n.is_read }"
-        @click="router.push(targetLink(n))"
+        @click="onItemClick(n)"
       >
         <span class="notif-icon">{{ typeIcon(n.type) }}</span>
         <div class="notif-body">

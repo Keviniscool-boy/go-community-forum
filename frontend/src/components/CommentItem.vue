@@ -1,18 +1,40 @@
 <script setup lang="ts">
 // 单条评论：一级评论与楼中楼回复共用；操作事件交给父组件处理
+// 编辑（PRD F4）：can_edit 时显示编辑按钮，内联 textarea 保存后由父组件调 API
+import { ref } from 'vue'
 import { Pointer } from '@element-plus/icons-vue'
 import type { CommentDetail } from '@/api/interaction'
 
-defineProps<{
+const props = defineProps<{
   comment: CommentDetail
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'like'): void
   (e: 'reply'): void
   (e: 'delete'): void
   (e: 'report'): void
+  (e: 'edit', content: string): void
 }>()
+
+const editing = ref(false)
+const editContent = ref('')
+
+function startEdit() {
+  editContent.value = props.comment.content
+  editing.value = true
+}
+
+function saveEdit() {
+  const content = editContent.value.trim()
+  if (!content) return
+  emit('edit', content)
+}
+
+function cancelEdit() {
+  editing.value = false
+  editContent.value = ''
+}
 
 // 2026-11-27T17:36:09+08:00 → 2026-11-27 17:36
 const fmtTime = (s?: string) => (s || '').slice(0, 16).replace('T', ' ')
@@ -23,13 +45,22 @@ const fmtTime = (s?: string) => (s || '').slice(0, 16).replace('T', ' ')
     <div class="ci-main">
       <span class="ci-user">{{ comment.is_deleted ? '该评论已删除' : comment.username }}</span>
       <span v-if="!comment.is_deleted && comment.reply_to_user" class="ci-reply-to">回复 @{{ comment.reply_to_user }}</span>
-      <span v-if="!comment.is_deleted" class="ci-content">{{ comment.content }}</span>
+      <span v-if="!comment.is_deleted && !editing" class="ci-content">{{ comment.content }}</span>
+      <span v-if="comment.edited" class="ci-edited">已编辑</span>
     </div>
-    <div v-if="!comment.is_deleted" class="ci-actions">
+    <div v-if="editing" class="ci-edit-box">
+      <el-input v-model="editContent" type="textarea" :rows="2" maxlength="2000" show-word-limit />
+      <div class="ci-edit-actions">
+        <el-button size="small" @click="cancelEdit">取消</el-button>
+        <el-button size="small" type="primary" @click="saveEdit">保存</el-button>
+      </div>
+    </div>
+    <div v-if="!comment.is_deleted && !editing" class="ci-actions">
       <button class="ci-btn" :class="{ active: comment.liked }" type="button" @click="$emit('like')">
         <el-icon><Pointer /></el-icon>{{ comment.liked ? '已赞' : '赞' }}<template v-if="comment.like_count"> · {{ comment.like_count }}</template>
       </button>
       <button class="ci-btn" type="button" @click="$emit('reply')">回复</button>
+      <button v-if="comment.can_edit && !editing" class="ci-btn" type="button" @click="startEdit">编辑</button>
       <button v-if="comment.can_delete" class="ci-btn danger" type="button" @click="$emit('delete')">删除</button>
       <button class="ci-btn" type="button" @click="$emit('report')">举报</button>
       <span class="ci-time">{{ fmtTime(comment.create_time) }}</span>
@@ -41,6 +72,22 @@ const fmtTime = (s?: string) => (s || '').slice(0, 16).replace('T', ' ')
 </template>
 
 <style scoped lang="less">
+.ci-edited {
+  color: var(--bb-text-tertiary);
+  font-size: 12px;
+}
+
+.ci-edit-box {
+  margin: 8px 0;
+
+  .ci-edit-actions {
+    margin-top: 6px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+}
+
 .ci {
   padding: 10px 0;
   border-bottom: 1px solid var(--bb-border);

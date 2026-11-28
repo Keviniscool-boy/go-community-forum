@@ -53,6 +53,8 @@ export interface CommentDetail {
   liked: boolean // 当前用户是否已点赞
   can_delete: boolean // 当前用户是否可删除（作者或管理员/审核员）
   is_deleted: boolean // 已删除但保留占位（下方仍有可见回复）
+  can_edit: boolean // 当前用户是否可编辑（作者且窗口内，PRD F4）
+  edited: boolean // update_time > create_time 即已编辑
   reply_to_user?: string // 回复另一条回复时的被回复人（「回复 @xxx」）
 }
 
@@ -90,4 +92,9 @@ export function unlikeComment(commentId: string) {
 // 删除评论（软删除，仅作者或管理员/审核员；其下回复保留）
 export function deleteComment(commentId: string) {
   return http.delete<null>(`comments/${commentId}`)
+}
+
+// 编辑评论（第五阶段 F4）
+export function editComment(commentId: string, content: string) {
+  return http.patch<unknown>(`comments/${commentId}`, { content })
 }

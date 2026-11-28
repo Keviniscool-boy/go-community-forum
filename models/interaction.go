@@ -82,6 +82,8 @@ type ApiCommentDetail struct {
 	Liked       bool   `json:"liked"`       // 当前用户是否已点赞
 	CanDelete   bool   `json:"can_delete"`  // 当前用户是否可删除（作者或管理员/审核员）
 	IsDeleted   bool   `json:"is_deleted"`  // 已删除但保留占位（下方仍有可见回复）
+	CanEdit     bool   `json:"can_edit"`    // 当前用户是否可编辑（作者且未超窗口，PRD F4）
+	Edited      bool   `json:"edited"`      // update_time > create_time 即已编辑
 }
 
 // ParamCreateComment 创建评论请求

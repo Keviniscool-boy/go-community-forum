@@ -64,3 +64,8 @@ export function followTopic(id: string) {
 export function unfollowTopic(id: string) {
   return http.delete<null>(`topics/${id}/follow`)
 }
+
+// 通知单条已读（第五阶段 F3；幂等）
+export function markNotificationRead(notificationId: string) {
+  return http.patch<null>(`notifications/${notificationId}/read`)
+}
