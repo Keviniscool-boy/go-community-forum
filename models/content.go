@@ -3,23 +3,35 @@ package models
 import "time"
 
 // Question 问题模型
+// resolution_status 与审核/可见性状态分离（迁移 014）：0=open 1=solved 2=closed
 type Question struct {
-	ID            int64     `json:"id,string" db:"question_id"`
-	Title         string    `json:"title" db:"title"`
-	Description   string    `json:"description" db:"description"`
-	AuthorID      int64     `json:"author_id,string" db:"author_id"`
-	AnswerCount   int32     `json:"answer_count" db:"answer_count"`
-	CommentCount  int32     `json:"comment_count" db:"comment_count"`
-	FollowerCount int32     `json:"follower_count" db:"follower_count"`
-	ViewCount     int32     `json:"view_count" db:"view_count"`
-	Status        int32     `json:"status" db:"status"`
-	CreateTime    time.Time `json:"create_time" db:"create_time"`
+	ID               int64     `json:"id,string" db:"question_id"`
+	Title            string    `json:"title" db:"title"`
+	Description      string    `json:"description" db:"description"`
+	AuthorID         int64     `json:"author_id,string" db:"author_id"`
+	AnswerCount      int32     `json:"answer_count" db:"answer_count"`
+	CommentCount     int32     `json:"comment_count" db:"comment_count"`
+	FollowerCount    int32     `json:"follower_count" db:"follower_count"`
+	ViewCount        int32     `json:"view_count" db:"view_count"`
+	Status           int32     `json:"status" db:"status"`
+	ResolutionStatus int32     `json:"resolution_status" db:"resolution_status"`
+	AcceptedAnswerID int64     `json:"accepted_answer_id,string" db:"accepted_answer_id"`
+	CreateTime       time.Time `json:"create_time" db:"create_time"`
+	UpdateTime       time.Time `json:"update_time" db:"update_time"`
+	RedirectTo       *int64    `json:"redirect_to,omitempty" db:"redirect_to"` // 治理合并目标（PRD F8）
 }
+
+// 问题解决状态（业务状态，独立于审核/删除状态）
+const (
+	QuestionResolutionOpen   = int32(0) // 可回答
+	QuestionResolutionSolved = int32(1) // 已采纳答案
+	QuestionResolutionClosed = int32(2) // 已关闭（不接受新回答）
+)
 
 // ApiQuestionDetail 问题详情接口返回模型（问题 + 作者名 + 话题列表）
 type ApiQuestionDetail struct {
 	*Question
-	AuthorName string           `json:"author_name"`
+	AuthorName string           `json:"author_name" db:"author_name"`
 	Topics     []*TopicBrief    `json:"topics"`
 }
 
@@ -44,6 +56,7 @@ type PageResult[T any] struct {
 }
 
 // Answer 回答模型
+// Accepted 标记为采纳状态（由 question.accepted_answer_id 派生，非持久化列）
 type Answer struct {
 	ID           int64     `json:"id,string" db:"answer_id"`
 	QuestionID   int64     `json:"question_id,string" db:"question_id"`
@@ -53,7 +66,9 @@ type Answer struct {
 	CommentCount int32     `json:"comment_count" db:"comment_count"`
 	CollectCount int32     `json:"collect_count" db:"collect_count"`
 	Status       int32     `json:"status" db:"status"`
+	Accepted     bool      `json:"accepted" db:"-"`
 	CreateTime   time.Time `json:"create_time" db:"create_time"`
+	UpdateTime   time.Time `json:"update_time" db:"update_time"`
 }
 
 // ApiAnswerDetail 回答详情接口返回模型（回答 + 作者名；用户主页场景带问题标题）
@@ -96,6 +111,44 @@ type ParamUpdateQuestion struct {
 	Description string `json:"description" binding:"max=10000"`
 }
 
+// ParamSetQuestionStatus 问题状态变更请求（仅 open/closed；solved 由采纳操作维护）
+type ParamSetQuestionStatus struct {
+	Status string `json:"status" binding:"required,oneof=open closed"`
+}
+
+// GET /me/content 内容类型与状态过滤（我的内容管理，PRD §4.4）
+const (
+	MeContentQuestion = "question"
+	MeContentAnswer   = "answer"
+	MeContentArticle  = "article"
+	MeContentColumn   = "column"
+
+	MeContentPublished = "published" // 公开（审核通过）
+	MeContentPending   = "pending"   // 审核中
+	MeContentHidden    = "hidden"    // 退回/隔离/隐藏
+	MeContentDeleted   = "deleted"   // 已删除
+)
+
+// ApiMyContentItem 我的内容管理条目（跨问题/回答/文章统一形状）
+type ApiMyContentItem struct {
+	ContentType      string    `json:"content_type"` // question | answer | article
+	ContentID        int64     `json:"content_id,string"`
+	Title            string    `json:"title"`                     // 问题/文章标题；回答为其所属问题标题
+	Excerpt          string    `json:"excerpt"`                   // 回答/文章正文摘要
+	Status           int32     `json:"status"`                    // 1=存在 0=已软删除
+	ModerationStatus int32     `json:"moderation_status"`         // 0 待审 1 通过 2 拒绝 3 隔离
+	ResolutionStatus int32     `json:"resolution_status"`         // 仅问题有值；回答/文章为 0
+	CreateTime       time.Time `json:"create_time"`
+}
+
+// ParamMyContent GET /me/content 查询参数
+type ParamMyContent struct {
+	Type   string `form:"type" json:"type" binding:"required,oneof=question answer article column"`
+	Status string `form:"status" json:"status" binding:"omitempty,oneof=published pending hidden deleted"`
+	Cursor string `form:"cursor" json:"cursor"`
+	Limit  int    `form:"limit" json:"limit"`
+}
+
 // ParamUpdateAnswer 编辑回答请求
 type ParamUpdateAnswer struct {
 	Content string `json:"content" binding:"required,min=1,max=20000"`
@@ -106,4 +159,10 @@ type ParamUpdateProfile struct {
 	Username  string `json:"username" binding:"omitempty,min=2,max=32"`
 	Bio       string `json:"bio" binding:"max=500"`
 	AvatarURL string `json:"avatar_url" binding:"max=500"`
+}
+
+// ParamQuestionRedirect 问题重定向请求（PRD F8）
+type ParamQuestionRedirect struct {
+	TargetID string `json:"target_id" binding:"required,min=1"`
+	Note     string `json:"note" binding:"max=500"`
 }

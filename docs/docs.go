@@ -3137,8 +3137,6 @@ const docTemplate = `{
                 1026,
                 1027,
                 1028,
-                1029,
-                1030
             ],
             "x-enum-varnames": [
                 "CodeSuccess",
@@ -3170,8 +3168,12 @@ const docTemplate = `{
                 "CodeForbidden",
                 "CodeResetTokenInvalid",
                 "CodeEmailConflict",
+<<<<<<< HEAD
+                "CodeDraftConflict"
+=======
                 "CodeDraftConflict",
                 "CodeCommentNotExist"
+>>>>>>> feat/phase5-social-dm
             ]
         },
         "controller.Response": {

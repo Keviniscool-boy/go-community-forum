@@ -19,6 +19,7 @@ func TestInteractionConsistency(t *testing.T) {
 		email varchar(255) NOT NULL, email_verified tinyint NOT NULL DEFAULT 0, password varchar(64) NOT NULL,
 		avatar_url varchar(500) NOT NULL DEFAULT '', bio varchar(500) NOT NULL DEFAULT '',
 		status tinyint NOT NULL DEFAULT 1, token_version int NOT NULL DEFAULT 0,
+		notify_settings json NULL,
 		PRIMARY KEY (id), UNIQUE KEY idx_user_id (user_id)) ENGINE=InnoDB`)
 	mustExec(t, `CREATE TABLE question (
 		id bigint NOT NULL AUTO_INCREMENT, question_id bigint NOT NULL, title varchar(200) NOT NULL,
@@ -59,6 +60,9 @@ func TestInteractionConsistency(t *testing.T) {
 		moderation_status tinyint NOT NULL DEFAULT 1, deleted_at timestamp NULL DEFAULT NULL,
 		create_time timestamp NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id),
 		UNIQUE KEY uk_comment_id (comment_id)) ENGINE=InnoDB`)
+	mustExec(t, `CREATE TABLE user_block (
+		id bigint NOT NULL AUTO_INCREMENT, blocker_id bigint NOT NULL, blocked_id bigint NOT NULL,
+		PRIMARY KEY (id), UNIQUE KEY uk_user_block (blocker_id, blocked_id)) ENGINE=InnoDB`)
 	mustExec(t, `CREATE TABLE notification (
 		id bigint NOT NULL AUTO_INCREMENT, notification_id bigint NOT NULL, user_id bigint NOT NULL,
 		actor_id bigint NOT NULL, type tinyint NOT NULL, target_type tinyint NOT NULL,

@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -66,7 +67,11 @@ func GetDB() *sqlx.DB {
 	return db
 }
 
-// setGlobalDB 测试用：替换全局数据库连接（migrate_test.go 使用）
+// SetGlobalDB / GetGlobalDB 供跨包集成测试与只读批查使用（写路径一律走 DAO 函数）
+func SetGlobalDB(d *sqlx.DB) { setGlobalDB(d) }
+
+func GetGlobalDB() *sqlx.DB { return db }
+
 func setGlobalDB(d *sqlx.DB) {
 	db = d
 }
@@ -82,4 +87,25 @@ func LatestMigrationVersion(ctx context.Context) (int, error) {
 	err := db.GetContext(ctx, &v,
 		"SELECT COALESCE(MAX(version), -1) FROM schema_migrations")
 	return v, err
+}
+
+// TxLike 事务句柄的最小接口（*sqlx.Tx 满足；便于跨 DAO 组合事务）
+type TxLike interface {
+	Get(dest interface{}, query string, args ...interface{}) error
+	QueryRow(query string, args ...interface{}) *sql.Row
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
+
+// WithTx 在单事务内执行 fn：成功提交，失败回滚并返回错误
+func WithTx(fn func(tx TxLike) error) error {
+	tx, err := db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	handle := TxLike(tx)
+	if err = fn(handle); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

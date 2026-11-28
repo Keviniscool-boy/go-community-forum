@@ -99,9 +99,16 @@ func buildFeedItems(rows []*mysql.FeedRow) ([]*models.FeedItem, error) {
 		if r.ItemType == "answer" {
 			item.QuestionID = strconv.FormatInt(r.QuestionID, 10)
 		}
+		if r.ItemType == "article" && r.ColumnID > 0 {
+			if c, err := mysql.GetColumnByID(r.ColumnID); err == nil {
+				item.Column = &models.ColumnBrief{ColumnID: strconv.FormatInt(c.ColumnID, 10), Name: c.Name}
+			}
+		}
 		item.Title = r.Title
-		if t, ok := topicMap[r.QuestionID]; ok && len(t) > 0 {
-			item.Topic = t[0]
+		if r.ItemType == "question" {
+			if t, ok := topicMap[r.QuestionID]; ok && len(t) > 0 {
+				item.Topic = t[0]
+			}
 		}
 		items = append(items, item)
 	}
@@ -247,7 +254,7 @@ func sliceFeedPage(entries []cachedFeedEntry, offset, limit int) (items []*model
 }
 
 // GetHotFeed 热榜（游标绑定缓存快照版本，快照刷新后旧游标返回可重试错误）
-func GetHotFeed(cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
+func GetHotFeed(viewerID int64, cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -258,7 +265,7 @@ func GetHotFeed(cursor string, limit int) (*models.PageResult[*models.FeedItem],
 	if err != nil {
 		return nil, err
 	}
-	items, hasMore := sliceFeedPage(snap.Entries, offset, limit)
+	items, hasMore := sliceFeedPage(filterEntriesByBlocks(snap.Entries, viewerID), offset, limit)
 	next := ""
 	if hasMore {
 		next = encodeOffsetCursor(offset+limit, snap.Version, 0)
@@ -270,7 +277,9 @@ func GetHotFeed(cursor string, limit int) (*models.PageResult[*models.FeedItem],
 	}, nil
 }
 
-// GetRecommendFeed 推荐流：热榜基础分 + 关注加分（未登录时与热榜一致）
+// GetRecommendFeed 推荐流：热榜基础分 + 关注加分（未登录或关闭个性化时与热榜一致）。
+// 过滤优先于排序：屏蔽作者、负反馈（不感兴趣内容/减少话题）、治理状态在返回前过滤；
+// 推荐理由只从服务端已知信号生成；每次响应条目签发 exposure_id 供点击关联。
 func GetRecommendFeed(userID int64, cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
 	if limit <= 0 {
 		limit = 20
@@ -282,17 +291,105 @@ func GetRecommendFeed(userID int64, cursor string, limit int) (*models.PageResul
 	if err != nil {
 		return nil, err
 	}
-	followed := map[int64]struct{}{}
+
+	// 个性化开关（关闭时：不加关注加分，不用任何个人信号，与热榜同序）
+	personalized := userID > 0
+	if personalized {
+		enabled, _, err := mysql.GetRecommendationPreference(userID)
+		if err != nil {
+			return nil, err
+		}
+		personalized = enabled
+	}
+
+	// 过滤集合：屏蔽作者、不感兴趣内容、减少话题
+	blockedSet := map[int64]struct{}{}
+	hiddenContent := map[string]struct{}{}
+	reducedTopics := map[int64]struct{}{}
 	if userID > 0 {
+		blocked, _ := mysql.BlockedAuthorIDs(userID)
+		for _, b := range blocked {
+			blockedSet[b] = struct{}{}
+		}
+		fb, _ := mysql.ListAllRecommendationFeedback(userID)
+		for _, f := range fb {
+			switch f.Kind {
+			case "not_interested":
+				hiddenContent[f.TargetType+":"+strconv.FormatInt(f.TargetID, 10)] = struct{}{}
+			case "reduce_topic":
+				reducedTopics[f.TargetID] = struct{}{}
+			}
+		}
+	}
+
+	// 过滤候选（返回前过滤；快照旧条目也不泄露）
+	entries := make([]cachedFeedEntry, 0, len(snap.Entries))
+	for _, e := range snap.Entries {
+		var aid int64
+		aid, _ = strconv.ParseInt(e.Item.Author.UserID, 10, 64)
+		if _, bad := blockedSet[aid]; bad {
+			continue
+		}
+		if _, bad := hiddenContent[e.Item.ItemType+":"+e.Item.ItemID]; bad {
+			continue
+		}
+		if e.Item.Topic != nil {
+			var tid int64
+			tid, _ = strconv.ParseInt(e.Item.Topic.TopicID, 10, 64)
+			if _, bad := reducedTopics[tid]; bad {
+				continue
+			}
+		}
+		entries = append(entries, e)
+	}
+
+	// 排序：个性化时加关注加分
+	followedSet := map[int64]struct{}{}
+	var followedTopicSetMap map[int64]struct{}
+	if personalized {
 		ids, err := mysql.FollowedUserIDs(userID)
 		if err != nil {
 			return nil, err
 		}
 		for _, id := range ids {
-			followed[id] = struct{}{}
+			followedSet[id] = struct{}{}
+		}
+		tids, err := mysql.FollowedTopicIDs(userID)
+		if err != nil {
+			return nil, err
+		}
+		followedTopicSetMap = make(map[int64]struct{}, len(tids))
+		for _, id := range tids {
+			followedTopicSetMap[id] = struct{}{}
 		}
 	}
-	items, hasMore := recommendPage(snap.Entries, followed, offset, limit)
+	items, hasMore := recommendPage(entries, followedSet, offset, limit)
+
+	// 装配推荐理由与 exposure_id
+	for _, item := range items {
+		var aid int64
+		aid, _ = strconv.ParseInt(item.Author.UserID, 10, 64)
+		if personalized {
+			if _, ok := followedSet[aid]; ok {
+				item.RecommendationReason = "你关注了该作者"
+			} else if item.Topic != nil && followedTopicSetMap != nil {
+				var tid int64
+				tid, _ = strconv.ParseInt(item.Topic.TopicID, 10, 64)
+				if _, ok := followedTopicSetMap[tid]; ok {
+					item.RecommendationReason = "你关注了该话题"
+				}
+			}
+		}
+		if item.RecommendationReason == "" {
+			if time.Since(item.CreateTime) < 48*time.Hour {
+				item.RecommendationReason = "近期新内容"
+			} else {
+				item.RecommendationReason = "近期热门"
+			}
+		}
+		item.ExposureID = strconv.FormatInt(snowflake.GenerateID(), 10)
+	}
+
 	next := ""
 	if hasMore {
 		next = encodeOffsetCursor(offset+limit, snap.Version, userID)
@@ -302,6 +399,30 @@ func GetRecommendFeed(userID int64, cursor string, limit int) (*models.PageResul
 		NextCursor: next,
 		HasMore:    hasMore,
 	}, nil
+}
+
+// filterEntriesByBlocks 热榜/推荐缓存的读时拉黑过滤（PRD F2）：
+// 快照跨用户共享，过滤只能按 viewer 在读取时做；offset 游标在过滤后的列表上保持一致
+// （同一 viewer 同一快照版本下过滤结果确定）。
+func filterEntriesByBlocks(entries []cachedFeedEntry, viewerID int64) []cachedFeedEntry {
+	if viewerID <= 0 || len(entries) == 0 {
+		return entries
+	}
+	blocked, err := mysql.BlockedIDsFor(viewerID)
+	if err != nil || len(blocked) == 0 {
+		return entries
+	}
+	set := make(map[string]struct{}, len(blocked))
+	for _, id := range blocked {
+		set[strconv.FormatInt(id, 10)] = struct{}{}
+	}
+	out := make([]cachedFeedEntry, 0, len(entries))
+	for _, e := range entries {
+		if _, hit := set[e.Item.Author.UserID]; !hit {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // parseOffsetAndSnapshot 解析 offset 游标并校验快照版本：
@@ -325,27 +446,8 @@ func parseOffsetAndSnapshot(cursor string, userID int64) (int, *cachedFeedSnapsh
 	return offset, snap, nil
 }
 
-// GetLatestFeed 最新流（时间 + id 双字段游标）
-func GetLatestFeed(cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
-	return timeOrderedFeed(cursor, limit, nil)
-}
-
-// GetFollowingFeed 关注流（需登录）
-func GetFollowingFeed(userID int64, cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
-	ids, err := mysql.FollowedUserIDs(userID)
-	if err != nil {
-		return nil, err
-	}
-	if len(ids) == 0 {
-		return &models.PageResult[*models.FeedItem]{
-			Items: make([]*models.FeedItem, 0), NextCursor: "", HasMore: false,
-		}, nil
-	}
-	return timeOrderedFeed(cursor, limit, ids)
-}
-
-// timeOrderedFeed 时间序 Feed 的公共实现（authorIDs 为 nil 时不限作者）
-func timeOrderedFeed(cursor string, limit int, authorIDs []int64) (*models.PageResult[*models.FeedItem], error) {
+// GetLatestFeed 最新流（时间 + 类型 + id 三字段游标，三类内容统一）
+func GetLatestFeed(viewerID int64, cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -364,24 +466,33 @@ func timeOrderedFeed(cursor string, limit int, authorIDs []int64) (*models.PageR
 		cursorType = c.Type
 		cursorID = c.ID
 	}
-	var rows []*mysql.FeedRow
-	var err error
-	if authorIDs == nil {
-		rows, err = mysql.LatestFeedPage(cursorTime, cursorType, cursorID, limit+1)
-	} else {
-		rows, err = mysql.FollowingFeedPage(authorIDs, cursorTime, cursorType, cursorID, limit+1)
-	}
+	rows, err := mysql.LatestFeedPage(cursorTime, cursorType, cursorID, limit+1)
 	if err != nil {
 		return nil, err
 	}
-	hasMore := false
+	hasMore := len(rows) > limit
 	if len(rows) > limit {
-		hasMore = true
 		rows = rows[:limit]
 	}
 	items, err := buildFeedItems(rows)
 	if err != nil {
 		return nil, err
+	}
+	// 拉黑过滤（PRD F2）：viewer 拉黑的作者不出现
+	if viewerID > 0 {
+		blockedSet := map[int64]struct{}{}
+		blocked, _ := mysql.BlockedAuthorIDs(viewerID)
+		for _, b := range blocked {
+			blockedSet[b] = struct{}{}
+		}
+		filtered := make([]*models.FeedItem, 0, len(items))
+		for _, it := range items {
+			aid, _ := strconv.ParseInt(it.Author.UserID, 10, 64)
+			if _, bad := blockedSet[aid]; !bad {
+				filtered = append(filtered, it)
+			}
+		}
+		items = filtered
 	}
 	next := ""
 	if hasMore && len(rows) > 0 {
@@ -393,6 +504,158 @@ func timeOrderedFeed(cursor string, limit int, authorIDs []int64) (*models.PageR
 		NextCursor: next,
 		HasMore:    hasMore,
 	}, nil
+}
+
+// GetFollowingFeed 关注流（需登录）：关注作者 + 关注话题 + 关注专栏 多来源，
+// 屏蔽作者过滤优先于关注（规格 4.2：屏蔽和隐藏规则优先于关注）
+func GetFollowingFeed(userID int64, cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	authorIDs, err := mysql.FollowedUserIDs(userID)
+	if err != nil {
+		return nil, err
+	}
+	topicIDs, err := mysql.FollowedTopicIDs(userID)
+	if err != nil {
+		return nil, err
+	}
+	columnIDs, err := mysql.FollowedColumnIDs(userID)
+	if err != nil {
+		return nil, err
+	}
+	blocked, err := mysql.BlockedAuthorIDs(userID)
+	if err != nil {
+		return nil, err
+	}
+	blockedSet := make(map[int64]struct{}, len(blocked))
+	for _, b := range blocked {
+		blockedSet[b] = struct{}{}
+	}
+	// 屏蔽作者从关注来源中剔除（屏蔽优先于关注）
+	if len(blockedSet) > 0 {
+		authorIDs = filterIDs(authorIDs, blockedSet)
+	}
+	if len(authorIDs) == 0 && len(topicIDs) == 0 && len(columnIDs) == 0 {
+		return &models.PageResult[*models.FeedItem]{
+			Items: make([]*models.FeedItem, 0), NextCursor: "", HasMore: false,
+		}, nil
+	}
+
+	var cursorTime time.Time
+	var cursorType string
+	var cursorID int64
+	if cursor != "" {
+		c, err := parseTimeCursor(cursor)
+		if err != nil {
+			return nil, ErrCursorInvalid
+		}
+		cursorTime = c.Time
+		cursorType = c.Type
+		cursorID = c.ID
+	}
+	rows, err := mysql.FollowingFeedPage(&mysql.FollowingFeedPageParams{
+		AuthorIDs:  authorIDs,
+		TopicIDs:   topicIDs,
+		ColumnIDs:  columnIDs,
+		CursorTime: cursorTime,
+		CursorType: cursorType,
+		CursorID:   cursorID,
+		Limit:      limit + 1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	// 屏蔽过滤（SQL 内已按来源过滤，作者屏蔽在此兜底）
+	filtered := make([]*mysql.FeedRow, 0, len(rows))
+	for _, r := range rows {
+		if _, bad := blockedSet[r.AuthorID]; bad {
+			continue
+		}
+		filtered = append(filtered, r)
+	}
+	rows = filtered
+	hasMore := len(rows) > limit
+	if len(rows) > limit {
+		rows = rows[:limit]
+	}
+	items, err := buildFeedItems(rows)
+	if err != nil {
+		return nil, err
+	}
+	// 多来源标注（规格 4.2：同一内容多路命中合并并返回来源数组）
+	markSources(items, userID)
+	next := ""
+	if hasMore && len(rows) > 0 {
+		last := rows[len(rows)-1]
+		next = encodeFeedTimeCursor(last.CreateTime, last.ItemType, last.ItemID)
+	}
+	return &models.PageResult[*models.FeedItem]{
+		Items:      items,
+		NextCursor: next,
+		HasMore:    hasMore,
+	}, nil
+}
+
+// filterIDs 移除在 excluded 集合中的 id
+func filterIDs(ids []int64, excluded map[int64]struct{}) []int64 {
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if _, bad := excluded[id]; !bad {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// markSources 为关注流条目标注命中来源（author/topic/column）
+func markSources(items []*models.FeedItem, userID int64) {
+	if len(items) == 0 {
+		return
+	}
+	authorIDs, _ := mysql.FollowedUserIDs(userID)
+	topicIDs, _ := mysql.FollowedTopicIDs(userID)
+	columnIDs, _ := mysql.FollowedColumnIDs(userID)
+	authorSet := make(map[int64]struct{}, len(authorIDs))
+	for _, id := range authorIDs {
+		authorSet[id] = struct{}{}
+	}
+	topicSet := make(map[int64]struct{}, len(topicIDs))
+	for _, id := range topicIDs {
+		topicSet[id] = struct{}{}
+	}
+	columnSet := make(map[int64]struct{}, len(columnIDs))
+	for _, id := range columnIDs {
+		columnSet[id] = struct{}{}
+	}
+	for _, item := range items {
+		sources := make([]string, 0, 3)
+		var aid int64
+		aid, _ = strconv.ParseInt(item.Author.UserID, 10, 64)
+		if _, ok := authorSet[aid]; ok {
+			sources = append(sources, "author")
+		}
+		if item.Topic != nil {
+			var tid int64
+			tid, _ = strconv.ParseInt(item.Topic.TopicID, 10, 64)
+			if _, ok := topicSet[tid]; ok {
+				sources = append(sources, "topic")
+			}
+		}
+		if item.Column != nil {
+			var cid int64
+			cid, _ = strconv.ParseInt(item.Column.ColumnID, 10, 64)
+			if _, ok := columnSet[cid]; ok {
+				sources = append(sources, "column")
+			}
+		}
+		if len(sources) > 0 {
+			item.Sources = sources
+		}
+	}
 }
 
 // ---------- 游标辅助 ----------

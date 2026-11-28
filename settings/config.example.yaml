@@ -2,6 +2,10 @@ app:
   name: "bluebell"
   mode: "dev"
   port: 8081
+  # 全局限流（令牌桶）：每 rate_limit_fill_seconds 秒补充 1 个令牌，桶容量 rate_limit_capacity
+  # 缺省 2s/100；e2e 或高并发场景可放宽
+  # rate_limit_fill_seconds: 2
+  # rate_limit_capacity: 100
 mysql:
   auto_migrate: true  # 启动时自动执行 models/migrations 迁移链
   host: "localhost"
@@ -23,6 +27,8 @@ redis:
 snowflake:
   start_time: "2026-07-24 00:00:00"
   machine_id: 1
+message:
+  evidence_key: ""  # 64 位 hex AES-256 密钥（举报证据加密）；生产由部署环境注入
 storage:
   local_root: "./uploads"  # 本地对象存储目录（生产替换 S3/MinIO）
 jwt:

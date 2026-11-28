@@ -42,7 +42,22 @@ const (
 	CodeResetTokenInvalid ResCode = 1027
 	CodeEmailConflict     ResCode = 1028
 	CodeDraftConflict     ResCode = 1029
-	CodeCommentNotExist   ResCode = 1030
+	CodeArticleNotExist   ResCode = 1030
+	CodeColumnNotExist    ResCode = 1031
+	CodePreferenceConflict ResCode = 1032
+	CodeAppealConflict    ResCode = 1033
+	CodeSeriesOrderConflict ResCode = 1034
+	CodeReviewPending     ResCode = 1035
+	CodeRevisionConflict  ResCode = 1038
+	CodeDMWaiting         ResCode = 1039
+	CodeDMCooldown        ResCode = 1040
+	CodeQuestionStateConflict ResCode = 1041
+	CodeAnswerNotAcceptable   ResCode = 1042
+	CodeQuestionClosedState   ResCode = 1043
+	CodeQuestionTransition    ResCode = 1044
+	CodeInvitationLimit       ResCode = 1045
+	CodeInvitationState       ResCode = 1046
+	CodeCommentNotExist       ResCode = 1047
 )
 
 var codeMsgMap = map[ResCode]string{
@@ -76,7 +91,22 @@ var codeMsgMap = map[ResCode]string{
 	CodeResetTokenInvalid:  "重置凭据无效或已过期",
 	CodeEmailConflict:      "该邮箱已被其他账号使用",
 	CodeDraftConflict:      "草稿版本冲突，请刷新后重试",
-	CodeCommentNotExist:    "评论不存在或已被删除",
+	CodeArticleNotExist:    "文章不存在",
+	CodeColumnNotExist:     "专栏不存在",
+	CodePreferenceConflict: "设置版本冲突，请刷新后重试",
+	CodeAppealConflict:     "该内容已有进行中的申诉",
+	CodeSeriesOrderConflict: "目录版本冲突，请刷新后重试",
+	CodeReviewPending:      "该版本已有进行中的审阅",
+	CodeRevisionConflict:   "版本冲突，请刷新后重试",
+	CodeDMWaiting:          "首条消息已发送，等待对方接受请求",
+	CodeDMCooldown:         "对方已拒绝过请求，请 7 天后再试",
+	CodeQuestionStateConflict: "问题状态已变化，请刷新后重试",
+	CodeAnswerNotAcceptable:   "该回答不可采纳",
+	CodeQuestionClosedState:   "问题已关闭，无法采纳回答",
+	CodeQuestionTransition:    "该状态转换不允许（solved 由采纳操作维护）",
+	CodeInvitationLimit:       "邀请数已达上限",
+	CodeInvitationState:       "邀请已处理或已失效",
+	CodeCommentNotExist:       "评论不存在或已被删除",
 }
 
 // 创建一个函数，传入code返回msg

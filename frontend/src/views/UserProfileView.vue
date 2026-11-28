@@ -2,8 +2,9 @@
 // 用户主页：基本信息、内容统计、关注按钮、提问与回答列表
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { fetchUserProfile, fetchUserQuestions, fetchUserAnswers, type UserProfile } from '@/api/user'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { fetchUserProfile, fetchUserQuestions, fetchUserAnswers, fetchUserArticles, fetchUserColumns, type UserProfile } from '@/api/user'
+import { blockUser, unblockUser, fetchUserInteractions } from '@/api/social'
 import { followUser, unfollowUser } from '@/api/interaction'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/api/http'
@@ -20,10 +21,12 @@ const userId = route.params.id as string
 const profile = ref<UserProfile | null>(null)
 const loading = ref(false)
 const error = ref('')
-const tab = ref<'questions' | 'answers'>('questions')
+const tab = ref<'questions' | 'answers' | 'articles' | 'columns'>('questions')
 
 const questions = ref<Array<{ id: string; title: string; answer_count: number; view_count: number; create_time: string }>>([])
 const answers = ref<Array<{ id: string; question_id: string; content: string; vote_count: number; create_time: string; question_title?: string }>>([])
+const articles = ref<Array<{ id: string; title: string; content: string; view_count: number; create_time: string }>>([])
+const columns = ref<Array<{ id: string; name: string; description: string; create_time: string }>>([])
 const listLoading = ref(false)
 
 const defaultAvatar = computed(
@@ -35,6 +38,41 @@ const defaultAvatar = computed(
 )
 
 const isSelf = computed(() => auth.user?.user_id === userId)
+
+// 拉黑/取消拉黑（PRD F2）：与目标用户的互动状态在加载时获取
+const isBlocked = ref(false)
+
+async function loadInteractions() {
+  if (!auth.isLoggedIn || isSelf.value) return
+  try {
+    const st = await fetchUserInteractions(userId)
+    isBlocked.value = st.is_blocked
+  } catch {
+    // 忽略
+  }
+}
+
+function onMessage() {
+  router.push({ name: 'chat', params: { id: 'new:' + userId } })
+}
+
+async function onToggleBlock() {
+  try {
+    if (isBlocked.value) {
+      await unblockUser(userId)
+      isBlocked.value = false
+      ElMessage.success('已取消拉黑')
+    } else {
+      await ElMessageBox.confirm('拉黑后你们互相不可见、无法关注和私信，确定拉黑？', '拉黑用户', { type: 'warning' })
+      await blockUser(userId)
+      isBlocked.value = true
+      ElMessage.success('已拉黑')
+    }
+    await load()
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  }
+}
 
 async function load() {
   loading.value = true
@@ -54,8 +92,12 @@ async function loadTab() {
   try {
     if (tab.value === 'questions') {
       questions.value = (await fetchUserQuestions(userId)) || []
-    } else {
+    } else if (tab.value === 'answers') {
       answers.value = (await fetchUserAnswers(userId)) || []
+    } else if (tab.value === 'articles') {
+      articles.value = (await fetchUserArticles(userId)) || []
+    } else {
+      columns.value = (await fetchUserColumns(userId)) || []
     }
   } catch (e) {
     if (e instanceof ApiError) ElMessage.error(e.message)
@@ -64,7 +106,7 @@ async function loadTab() {
   }
 }
 
-function switchTab(t: 'questions' | 'answers') {
+function switchTab(t: 'questions' | 'answers' | 'articles' | 'columns') {
   if (tab.value === t) return
   tab.value = t
   loadTab()
@@ -92,7 +134,10 @@ async function onFollow() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadInteractions()
+})
 </script>
 
 <template>
@@ -109,8 +154,12 @@ onMounted(load)
           <h2 class="profile-name">{{ profile.username }}</h2>
           <p class="profile-bio">{{ profile.bio || '这个人很懒，什么都没写' }}</p>
           <div class="profile-stats">
-            <span><strong>{{ profile.follower_count }}</strong> 关注者</span>
-            <span><strong>{{ profile.following_count }}</strong> 关注了</span>
+            <router-link class="stat-link" :to="`/users/${userId}/followers`">
+              <strong>{{ profile.follower_count }}</strong> 关注者
+            </router-link>
+            <router-link class="stat-link" :to="`/users/${userId}/following`">
+              <strong>{{ profile.following_count }}</strong> 关注了
+            </router-link>
             <span><strong>{{ profile.question_count }}</strong> 提问</span>
             <span><strong>{{ profile.answer_count }}</strong> 回答</span>
           </div>
@@ -124,6 +173,12 @@ onMounted(load)
           >
             {{ profile.is_following ? '已关注' : '+ 关注' }}
           </el-button>
+          <el-button v-if="!isSelf && !isBlocked" size="round" plain @click="onMessage">
+            私信
+          </el-button>
+          <el-button v-if="!isSelf" size="round" plain :type="isBlocked ? 'danger' : 'default'" @click="onToggleBlock">
+            {{ isBlocked ? '已拉黑' : '拉黑' }}
+          </el-button>
         </div>
       </div>
 
@@ -135,6 +190,12 @@ onMounted(load)
         <button class="tab-btn" :class="{ active: tab === 'answers' }" @click="switchTab('answers')">
           回答 {{ profile.answer_count }}
         </button>
+        <button class="tab-btn" :class="{ active: tab === 'articles' }" @click="switchTab('articles')">
+          文章
+        </button>
+        <button class="tab-btn" :class="{ active: tab === 'columns' }" @click="switchTab('columns')">
+          专栏
+        </button>
       </div>
 
       <div v-if="listLoading" class="bb-card"><LoadingState /></div>
@@ -145,7 +206,7 @@ onMounted(load)
           <div class="content-meta">{{ q.answer_count }} 回答 · {{ q.view_count }} 浏览 · {{ q.create_time?.slice(0, 10) }}</div>
         </article>
       </div>
-      <div v-else>
+      <div v-else-if="tab === 'answers'">
         <div v-if="answers.length === 0" class="bb-card"><EmptyState text="还没有回答" /></div>
         <article v-for="a in answers" :key="a.id" class="bb-card content-card">
           <router-link class="content-title" :to="`/questions/${a.question_id}`">
@@ -153,6 +214,22 @@ onMounted(load)
           </router-link>
           <p class="content-excerpt">{{ a.content }}</p>
           <div class="content-meta">{{ a.vote_count }} 赞同 · {{ a.create_time?.slice(0, 10) }}</div>
+        </article>
+      </div>
+      <div v-else-if="tab === 'articles'">
+        <div v-if="articles.length === 0" class="bb-card"><EmptyState text="还没有公开文章" /></div>
+        <article v-for="a in articles" :key="a.id" class="bb-card content-card">
+          <router-link class="content-title" :to="`/articles/${a.id}`">{{ a.title }}</router-link>
+          <p class="content-excerpt">{{ a.content }}</p>
+          <div class="content-meta">{{ a.view_count }} 阅读 · {{ a.create_time?.slice(0, 10) }}</div>
+        </article>
+      </div>
+      <div v-else>
+        <div v-if="columns.length === 0" class="bb-card"><EmptyState text="还没有公开专栏" /></div>
+        <article v-for="c in columns" :key="c.id" class="bb-card content-card">
+          <router-link class="content-title" :to="`/columns/${c.id}`">{{ c.name }}</router-link>
+          <p class="content-excerpt">{{ c.description }}</p>
+          <div class="content-meta">{{ c.create_time?.slice(0, 10) }}</div>
         </article>
       </div>
     </template>
@@ -182,6 +259,15 @@ onMounted(load)
   margin: 6px 0;
   color: var(--bb-text-secondary);
   font-size: 14px;
+}
+
+.stat-link {
+  color: var(--bb-text-tertiary);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--bb-primary);
+  }
 }
 
 .profile-stats {

@@ -47,6 +47,11 @@ func FollowUserHandler(c *gin.Context) {
 			ResponseError(c, CodeInvalidParams)
 			return
 		}
+		// 拉黑拒绝：统一文案"对方暂不接受关注"，不暴露关系状态（PRD F2）
+		if errors.Is(err, logic.ErrFollowBlocked) {
+			ResponseErrorWithMsg(c, CodeForbidden, "对方暂不接受关注")
+			return
+		}
 		ResponseError(c, CodeServerBusy)
 		return
 	}
@@ -373,7 +378,7 @@ func ListNotificationsHandler(c *gin.Context) {
 		ResponseError(c, CodeNeedLogin)
 		return
 	}
-	data, err := logic.ListNotifications(userID, c.Query("cursor"), atoiDefault(c.Query("limit"), 20))
+	data, err := logic.ListNotifications(userID, c.Query("cursor"), atoiDefault(c.Query("limit"), 20), c.Query("type"))
 	if err != nil {
 		zap.L().Error("logic.ListNotifications failed", zap.Error(err))
 		ResponseError(c, CodeServerBusy)

@@ -2,6 +2,7 @@ package logic
 
 import (
 	"errors"
+	"strings"
 
 	"bluebell/dao/mysql"
 	"bluebell/models"
@@ -9,6 +10,9 @@ import (
 
 // 内容管理业务错误
 var ErrForbidden = errors.New("无权操作该内容")
+
+// ErrAvatarInvalid 头像地址不合法（PRD F5：仅 /media/ 前缀或 https 外链）
+var ErrAvatarInvalid = errors.New("头像地址仅支持站内媒体或 https 外链")
 
 // EditQuestion 作者编辑问题
 func EditQuestion(userID int64, questionID int64, p *models.ParamUpdateQuestion) error {
@@ -60,6 +64,12 @@ func DeleteAnswer(userID, answerID int64) error {
 
 // UpdateProfile 更新个人资料（用户名非空时更新，唯一性冲突返回 ErrRegisterConflict）
 func UpdateProfile(userID int64, p *models.ParamUpdateProfile) error {
+	// 头像校验（PRD F5）：仅站内 /media/ 前缀或 https 外链，长度 ≤500（binding 已限 500）
+	if p.AvatarURL != "" {
+		if !strings.HasPrefix(p.AvatarURL, "/media/") && !strings.HasPrefix(p.AvatarURL, "https://") {
+			return ErrAvatarInvalid
+		}
+	}
 	if p.Username != "" {
 		taken, err := mysql.CheckUsernameExist(p.Username)
 		if err != nil {

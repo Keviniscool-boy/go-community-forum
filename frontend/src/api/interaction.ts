@@ -53,10 +53,12 @@ export interface CommentDetail {
   liked: boolean // 当前用户是否已点赞
   can_delete: boolean // 当前用户是否可删除（作者或管理员/审核员）
   is_deleted: boolean // 已删除但保留占位（下方仍有可见回复）
+  can_edit: boolean // 当前用户是否可编辑（作者且窗口内，PRD F4）
+  edited: boolean // update_time > create_time 即已编辑
   reply_to_user?: string // 回复另一条回复时的被回复人（「回复 @xxx」）
 }
 
-export function fetchComments(targetType: 'answer' | 'question', targetId: string, cursor = '', limit = 20) {
+export function fetchComments(targetType: 'answer' | 'question' | 'article', targetId: string, cursor = '', limit = 20) {
   return http.get<import('./feed').PageResult<CommentDetail>>('comments', {
     params: { target_type: targetType, target_id: targetId, cursor, limit },
   })
@@ -70,7 +72,7 @@ export function fetchCommentReplies(commentId: string, cursor = '', limit = 20) 
 }
 
 // parentId：被回复的评论 ID（可以是一级评论，也可以是其下的一条回复）
-export function createComment(targetType: 'answer' | 'question', targetId: string, content: string, parentId?: string) {
+export function createComment(targetType: 'answer' | 'question' | 'article', targetId: string, content: string, parentId?: string) {
   return http.post<{ comment_id: string }>('comments', {
     target_type: targetType,
     target_id: targetId,
@@ -90,4 +92,9 @@ export function unlikeComment(commentId: string) {
 // 删除评论（软删除，仅作者或管理员/审核员；其下回复保留）
 export function deleteComment(commentId: string) {
   return http.delete<null>(`comments/${commentId}`)
+}
+
+// 编辑评论（第五阶段 F4）
+export function editComment(commentId: string, content: string) {
+  return http.patch<unknown>(`comments/${commentId}`, { content })
 }

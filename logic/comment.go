@@ -4,16 +4,24 @@ import (
 	"database/sql"
 	"errors"
 	"strconv"
+	"time"
+	"unicode/utf8"
 
 	"bluebell/dao/mysql"
 	"bluebell/models"
 	"bluebell/pkg/snowflake"
+
+	"github.com/spf13/viper"
 )
 
 // 评论体系业务逻辑：两级结构（一级评论 + 楼中楼回复）、点赞、删除。
 // 列表组装统一走 assembleCommentDetails：批量补作者、点赞状态与删除权限，避免 N+1 查询。
 
-var ErrCommentNotExist = errors.New("评论不存在")
+var (
+	ErrCommentNotExist   = errors.New("评论不存在")
+	ErrCommentNotOwner   = errors.New("仅评论作者可以编辑")
+	ErrCommentEditWindow = errors.New("评论已超出可编辑时间")
+)
 
 // parseCommentTarget 解析并校验 target_type / target_id
 func parseCommentTarget(targetTypeStr, targetIDStr string) (int32, int64, error) {
@@ -88,6 +96,15 @@ func commentVisible(cm *models.Comment) bool {
 	return cm != nil && cm.Status == 1 && cm.ModerationStatus == 1 && !cm.DeletedAt.Valid
 }
 
+// editWindow 评论编辑窗口（秒；配置 comment.edit_window，默认 300）
+func editWindow() time.Duration {
+	w := time.Duration(viper.GetInt("comment.edit_window")) * time.Second
+	if w <= 0 {
+		w = 300 * time.Second
+	}
+	return w
+}
+
 // assembleCommentDetails 批量组装评论详情（作者、被回复人、点赞状态、删除权限）
 // 已删除的占位评论抹掉内容与作者信息，只保留「该评论已删除」语义。
 func assembleCommentDetails(rows []*mysql.CommentRow, viewerID int64, privileged bool) ([]*models.ApiCommentDetail, error) {
@@ -123,6 +140,8 @@ func assembleCommentDetails(rows []*mysql.CommentRow, viewerID int64, privileged
 			ReplyCount: r.ReplyCount,
 			Liked:      liked[r.CommentID],
 			CanDelete:  viewerID > 0 && (r.UserID == viewerID || privileged),
+			CanEdit:    viewerID > 0 && r.UserID == viewerID && !r.DeletedAt.Valid && time.Since(r.CreateTime) <= editWindow(),
+			Edited:     r.UpdateTime.Valid && r.UpdateTime.Time.After(r.CreateTime),
 		}
 		if r.DeletedAt.Valid {
 			detail.IsDeleted = true
@@ -216,6 +235,7 @@ func ListComments(viewerID int64, viewerRole, targetTypeStr, targetIDStr, cursor
 		CursorTime: cursorTime,
 		CursorID:   cursorID,
 		Limit:      limit,
+		ViewerID:   viewerID, // 拉黑过滤（PRD F2）
 	})
 	if err != nil {
 		return nil, err
@@ -243,7 +263,7 @@ func ListCommentReplies(viewerID int64, viewerRole, commentIDStr, cursor string,
 	if err != nil {
 		return nil, err
 	}
-	rows, err := mysql.ListCommentReplies(parentID, cursorTime, cursorID, limit)
+	rows, err := mysql.ListCommentReplies(parentID, viewerID, cursorTime, cursorID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -293,4 +313,56 @@ func UnlikeComment(userID, commentID int64) error {
 		return err
 	}
 	return nil
+}
+
+// EditComment 作者限时编辑评论（第五阶段 PRD F4）
+// 规则：仅作者本人（管理员走下架流程）；5 分钟窗口（comment.edit_window，默认 300s）；
+// 已删除/占位评论不可编辑；编辑内容重走发布审核流（敏感词，与发表同策略）。
+func EditComment(userID int64, commentIDStr string, content string) (*models.ApiCommentDetail, error) {
+	commentID, err := strconv.ParseInt(commentIDStr, 10, 64)
+	if err != nil || commentID <= 0 {
+		return nil, ErrCommentInvalid
+	}
+	if len(content) == 0 || len(content) > 2000 || !utf8.ValidString(content) {
+		return nil, ErrCommentInvalid
+	}
+	cm, err := mysql.GetCommentByID(commentID)
+	if err != nil {
+		return nil, ErrCommentNotExist
+	}
+	if cm.UserID != userID {
+		return nil, ErrCommentNotOwner
+	}
+	if cm.Status != 1 || cm.DeletedAt.Valid {
+		return nil, ErrCommentInvalid // 已删除/占位评论不可编辑
+	}
+	window := editWindow()
+	if time.Since(cm.CreateTime) > window {
+		return nil, ErrCommentEditWindow
+	}
+	// 重走发布审核流：与发表同一策略（普通内容直接生效；命中词进入对应状态）
+	decision, err := CheckContentModeration(content)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := mysql.UpdateCommentContent(commentID, userID, content, decision.Status)
+	if err != nil {
+		return nil, err
+	}
+	if !updated {
+		return nil, ErrCommentNotExist
+	}
+	// 返回编辑后的详情（点赞/回复数不受影响，读取即可）
+	fresh, err := mysql.GetCommentByID(commentID)
+	if err != nil {
+		return nil, err
+	}
+	detail, err := pageCommentDetails([]*mysql.CommentRow{{Comment: *fresh}}, 1, userID, models.IsPrivilegedRole("user"))
+	if err != nil {
+		return nil, err
+	}
+	if len(detail.Items) == 0 {
+		return nil, ErrCommentNotExist
+	}
+	return detail.Items[0], nil
 }

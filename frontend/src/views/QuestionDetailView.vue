@@ -4,12 +4,13 @@ import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { View as ViewIcon, CaretTop, Star } from '@element-plus/icons-vue'
-import { fetchQuestionDetail, fetchAnswers, createAnswer, updateQuestion, deleteQuestion, updateAnswer, deleteAnswer, type QuestionDetail, type AnswerDetail } from '@/api/question'
+import { fetchQuestionDetail, fetchAnswers, createAnswer, updateQuestion, deleteQuestion, updateAnswer, deleteAnswer, acceptAnswer, unacceptAnswer, setQuestionStatus, type QuestionDetail, type AnswerDetail } from '@/api/question'
 import { voteAnswer, collectAnswer, uncollectAnswer, followQuestion, unfollowQuestion, fetchQuestionInteractions, fetchAnswerInteractions } from '@/api/interaction'
 import { followUser, unfollowUser } from '@/api/interaction'
 import { addBookmarkItem, listFolders, createFolder, type BookmarkFolder } from '@/api/productivity'
 import { createReport } from '@/api/productivity'
-import { useAuthStore } from '@/stores/auth'
+import { fetchInviteCandidates, sendAnswerInvitations, fetchQuestionInvitations, fetchMyAnswerInvitations, acceptAnswerInvitation, declineAnswerInvitation, invitationStatusLabels, type CandidateUser, type AnswerInvitation } from '@/api/invitation'
+import { useAuthStore } from '@/stores/auth' 
 import { ApiError } from '@/api/http'
 import LoadingState from '@/components/LoadingState.vue'
 import ErrorState from '@/components/ErrorState.vue'
@@ -148,6 +149,11 @@ async function load() {
   error.value = ''
   try {
     question.value = await fetchQuestionDetail(questionId)
+    // 治理重定向（PRD F8）：A 详情自动跳转到 B
+    if (question.value.redirect_to) {
+      router.replace(`/questions/${question.value.redirect_to}?merged=${questionId}`)
+      return
+    }
     // 登录后拉取互动状态
     if (auth.isLoggedIn) {
       try {
@@ -263,6 +269,199 @@ function switchOrder(o: 'hot' | 'latest') {
   loadAnswers(true)
 }
 
+// ---------- 解决闭环（采纳/撤销/关闭/重开） ----------
+
+// resolution_status: 0=open 1=solved 2=closed
+const isSolved = computed(() => question.value?.resolution_status === 1)
+const isClosed = computed(() => question.value?.resolution_status === 2)
+const acceptedAnswerId = computed(() => question.value?.accepted_answer_id || '')
+
+const acceptingId = ref('')
+
+// 采纳回答（仅提问者）
+async function onAccept(a: AnswerDetail) {
+  if (!auth.isLoggedIn) {
+    router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  try {
+    await ElMessageBox.confirm('采纳后问题将标记为已解决，确定采纳该回答？', '采纳回答', { type: 'success' })
+  } catch {
+    return
+  }
+  acceptingId.value = a.id
+  try {
+    await acceptAnswer(questionId, a.id)
+    ElMessage.success('已采纳该回答')
+    await load()
+    await loadAnswers(true)
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    acceptingId.value = ''
+  }
+}
+
+// 撤销采纳（仅提问者）
+async function onUnaccept(a: AnswerDetail) {
+  if (!auth.isLoggedIn) {
+    router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  try {
+    await ElMessageBox.confirm('撤销后问题将恢复为待解决，确定撤销？', '撤销采纳', { type: 'warning' })
+  } catch {
+    return
+  }
+  acceptingId.value = a.id
+  try {
+    await unacceptAnswer(questionId, a.id)
+    ElMessage.success('已撤销采纳')
+    await load()
+    await loadAnswers(true)
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    acceptingId.value = ''
+  }
+}
+
+// 关闭/重开问题（仅提问者）
+const statusSubmitting = ref(false)
+async function onToggleClosed() {
+  if (!auth.isLoggedIn) {
+    router.push({ name: 'login', query: { redirect: route.fullPath } })
+    return
+  }
+  const closing = !isClosed.value
+  try {
+    await ElMessageBox.confirm(
+      closing ? '关闭后将不再接受新回答，确定关闭？' : '重开后其他用户可以继续回答，确定重开？',
+      closing ? '关闭问题' : '重开问题',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  statusSubmitting.value = true
+  try {
+    await setQuestionStatus(questionId, closing ? 'closed' : 'open')
+    ElMessage.success(closing ? '问题已关闭' : '问题已重开')
+    await load()
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    statusSubmitting.value = false
+  }
+}
+
+// ---------- 邀请回答（PRD §6.2） ----------
+
+const inviteDialogVisible = ref(false)
+const candidates = ref<CandidateUser[]>([])
+const candidatesLoading = ref(false)
+const selectedInvitees = ref<string[]>([])
+const inviteKeyword = ref('')
+const inviteSubmitting = ref(false)
+const inviteResults = ref<{ invitee_id: string; ok: boolean; reason?: string; username?: string }[]>([])
+const questionInvitations = ref<AnswerInvitation[]>([])
+
+const canInvite = computed(() =>
+  isQuestionAuthor.value && !isClosed.value && !isSolved.value && (question.value?.answer_count ?? 0) === 0,
+)
+
+async function openInviteDialog() {
+  inviteDialogVisible.value = true
+  inviteResults.value = []
+  selectedInvitees.value = []
+  await loadCandidates()
+  loadQuestionInvitations()
+}
+
+async function loadCandidates() {
+  candidatesLoading.value = true
+  try {
+    candidates.value = (await fetchInviteCandidates(questionId, inviteKeyword.value.trim())) || []
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    candidatesLoading.value = false
+  }
+}
+
+function toggleInvitee(userId: string) {
+  const idx = selectedInvitees.value.indexOf(userId)
+  if (idx >= 0) {
+    selectedInvitees.value.splice(idx, 1)
+  } else if (selectedInvitees.value.length < 5) {
+    selectedInvitees.value.push(userId)
+  } else {
+    ElMessage.warning('一次最多邀请 5 人')
+  }
+}
+
+async function submitInvitations() {
+  if (selectedInvitees.value.length === 0) return ElMessage.warning('请先选择要邀请的用户')
+  inviteSubmitting.value = true
+  try {
+    const results = (await sendAnswerInvitations(questionId, selectedInvitees.value)) || []
+    const nameMap = new Map(candidates.value.map((c) => [c.user_id, c.username]))
+    inviteResults.value = results.map((r) => ({
+      ...r,
+      username: nameMap.get(r.invitee_id) || r.invitee_id,
+    }))
+    selectedInvitees.value = []
+    const okCount = results.filter((r) => r.ok).length
+    if (okCount > 0) ElMessage.success(`已向 ${okCount} 位用户发送邀请`)
+    loadQuestionInvitations()
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    inviteSubmitting.value = false
+  }
+}
+
+async function loadQuestionInvitations() {
+  try {
+    questionInvitations.value = (await fetchQuestionInvitations(questionId)) || []
+  } catch {
+    // 非作者或加载失败忽略
+  }
+}
+
+// 被邀请横幅：当前登录用户在该问题上有待处理邀请
+const myPendingInvitation = ref<AnswerInvitation | null>(null)
+const inviteResponding = ref(false)
+
+async function loadMyPendingInvitation() {
+  if (!auth.isLoggedIn) return
+  try {
+    const res = (await fetchMyAnswerInvitations({ status: 'pending', limit: 50 })) || []
+    myPendingInvitation.value = res.items.find((it) => it.question_id === questionId) || null
+  } catch {
+    // 忽略
+  }
+}
+
+async function respondMyInvitation(decision: 'accept' | 'decline') {
+  if (!myPendingInvitation.value) return
+  inviteResponding.value = true
+  try {
+    if (decision === 'accept') {
+      await acceptAnswerInvitation(myPendingInvitation.value.id)
+      ElMessage.success('已接受邀请，欢迎写下你的回答')
+    } else {
+      await declineAnswerInvitation(myPendingInvitation.value.id)
+      ElMessage.success('已婉拒邀请')
+    }
+    myPendingInvitation.value = null
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    inviteResponding.value = false
+  }
+}
+
 // 投票（同一回答再次点击同一方向 = 取消）
 async function onVote(a: AnswerDetail, direction: 1 | -1) {
   if (!auth.isLoggedIn) {
@@ -368,6 +567,7 @@ async function submitAnswer() {
 onMounted(async () => {
   load()
   await loadAnswers(true)
+  loadMyPendingInvitation()
   await scrollToHashAnswer()
 })
 
@@ -391,10 +591,25 @@ async function scrollToHashAnswer() {
       <ErrorState :text="error" @retry="load" />
     </div>
     <template v-else-if="question">
+      <!-- 被邀请横幅（PRD §6.3） -->
+      <div v-if="myPendingInvitation" class="bb-card invite-banner">
+        <span>
+          <strong>{{ myPendingInvitation.inviter_name }}</strong> 邀请你回答这个问题
+        </span>
+        <span class="invite-banner-actions">
+          <el-button type="primary" size="small" :loading="inviteResponding" @click="respondMyInvitation('accept')">
+            接受邀请
+          </el-button>
+          <el-button size="small" :disabled="inviteResponding" @click="respondMyInvitation('decline')">婉拒</el-button>
+        </span>
+      </div>
+
       <!-- 问题正文 -->
       <article class="bb-card q-card">
         <h1 class="q-title">{{ question.title }}</h1>
         <div class="q-meta">
+          <el-tag v-if="isSolved" type="success" effect="light" size="small" class="q-status-tag">已解决</el-tag>
+          <el-tag v-else-if="isClosed" type="info" effect="light" size="small" class="q-status-tag">已关闭</el-tag>
           <span class="q-author">{{ question.author_name }}</span>
           <span>发布于 {{ question.create_time?.slice(0, 10) }}</span>
           <span class="q-views"><el-icon><ViewIcon /></el-icon>{{ question.view_count }} 次浏览</span>
@@ -412,8 +627,18 @@ async function scrollToHashAnswer() {
           </el-button>
           <template v-if="isQuestionAuthor">
             <el-button size="small" plain @click="openEditQuestion">编辑</el-button>
+            <el-button
+              v-if="!isSolved"
+              size="small"
+              plain
+              :loading="statusSubmitting"
+              @click="onToggleClosed"
+            >
+              {{ isClosed ? '重开问题' : '关闭问题' }}
+            </el-button>
             <el-button size="small" plain type="danger" @click="onDeleteQuestion">删除</el-button>
           </template>
+          <el-button v-if="canInvite" size="small" plain type="success" @click="openInviteDialog">邀请回答</el-button>
           <el-button size="small" plain :loading="bookmarkLoading" @click="onBookmark">收藏</el-button>
           <el-button size="small" plain type="warning" @click="openReport">举报</el-button>
         </div>
@@ -455,6 +680,65 @@ async function scrollToHashAnswer() {
         </template>
       </el-dialog>
 
+      <!-- 邀请回答对话框（PRD §6.2） -->
+      <el-dialog v-model="inviteDialogVisible" title="邀请回答" width="90%" style="max-width: 560px">
+        <p class="invite-hint">将通知所选用户（一次最多 5 人）；候选按同话题贡献排序</p>
+        <el-input
+          v-model="inviteKeyword"
+          placeholder="按用户名搜索候选"
+          clearable
+          @keyup.enter="loadCandidates"
+        />
+        <div v-if="candidatesLoading" class="invite-loading"><LoadingState /></div>
+        <ul v-else class="candidate-list">
+          <li v-for="c in candidates" :key="c.user_id" class="candidate-item">
+            <label class="candidate-label">
+              <input
+                type="checkbox"
+                :checked="selectedInvitees.includes(c.user_id)"
+                @change="toggleInvitee(c.user_id)"
+              />
+              <span class="candidate-name">{{ c.username }}</span>
+              <el-tag size="small" effect="plain">{{ c.reason }}</el-tag>
+            </label>
+          </li>
+          <li v-if="candidates.length === 0" class="candidate-empty">暂无可邀请的候选用户</li>
+        </ul>
+        <div v-if="inviteResults.length" class="invite-results">
+          <div
+            v-for="r in inviteResults"
+            :key="r.invitee_id"
+            class="invite-result-item"
+            :class="{ failed: !r.ok }"
+          >
+            {{ r.username }}：{{ r.ok ? '邀请已送达' : r.reason }}
+          </div>
+        </div>
+        <template #footer>
+          <el-button @click="inviteDialogVisible = false">关闭</el-button>
+          <el-button
+            type="primary"
+            :loading="inviteSubmitting"
+            :disabled="selectedInvitees.length === 0"
+            @click="submitInvitations"
+          >
+            发送邀请（{{ selectedInvitees.length }}/5）
+          </el-button>
+        </template>
+      </el-dialog>
+
+      <!-- 邀请记录（仅作者可见） -->
+      <div v-if="isQuestionAuthor && questionInvitations.length" class="bb-card invite-record-card">
+        <h3 class="invite-record-title">邀请记录</h3>
+        <ul class="invite-record-list">
+          <li v-for="inv in questionInvitations" :key="inv.id" class="invite-record-item">
+            <span class="invite-record-name">{{ inv.invitee_name }}</span>
+            <el-tag size="small" effect="light">{{ invitationStatusLabels[inv.status] || inv.status }}</el-tag>
+            <span class="invite-record-time">{{ inv.create_time?.slice(0, 10) }}</span>
+          </li>
+        </ul>
+      </div>
+
       <!-- 回答区 -->
       <div class="answers-header">
         <span class="answers-count">{{ answerCount }} 个回答</span>
@@ -474,7 +758,7 @@ async function scrollToHashAnswer() {
         <EmptyState text="还没有回答，写下你的答案" />
       </div>
       <template v-else>
-        <article v-for="a in answers" :id="`answer-${a.id}`" :key="a.id" class="bb-card answer-card">
+        <article v-for="a in answers" :id="`answer-${a.id}`" :key="a.id" class="bb-card answer-card" :class="{ 'answer-accepted': a.accepted }">
           <div class="a-vote">
             <button class="vote-btn" :class="{ active: voteMap[a.id] === 1 }" @click="onVote(a, 1)">
               <el-icon><CaretTop /></el-icon>
@@ -483,6 +767,7 @@ async function scrollToHashAnswer() {
           </div>
           <div class="a-body">
             <div class="a-author-row">
+              <el-tag v-if="a.accepted" type="success" size="small" effect="light" class="accepted-tag">✓ 已采纳</el-tag>
               <router-link class="a-author" :to="`/users/${a.author_id}`">{{ a.author_name }}</router-link>
             </div>
             <div class="a-content">{{ a.content }}</div>
@@ -491,6 +776,26 @@ async function scrollToHashAnswer() {
               <button class="footer-btn" :class="{ active: collectMap[a.id] }" @click="onCollect(a)">
                 <el-icon><Star /></el-icon>{{ collectMap[a.id] ? '已收藏' : '收藏' }} · {{ a.collect_count }}
               </button>
+              <!-- 仅提问者可采纳/撤销；closed 状态不显示采纳（frontend-v3） -->
+              <template v-if="isQuestionAuthor && !isClosed">
+                <button
+                  v-if="a.accepted"
+                  class="footer-btn accepted-btn"
+                  :disabled="acceptingId === a.id"
+                  @click="onUnaccept(a)"
+                >
+                  取消采纳
+                </button>
+                <button
+                  v-else
+                  class="footer-btn"
+                  :disabled="acceptingId === a.id || !!acceptedAnswerId"
+                  @click="onAccept(a)"
+                >
+                  采纳
+                </button>
+              </template>
+              <!-- 楼中楼评论区（第四阶段）：默认折叠，点击「评论」时才挂载 -->
               <button class="footer-btn" :class="{ active: openCommentsFor === a.id }" @click="toggleAnswerComments(a)">
                 {{ openCommentsFor === a.id ? '收起评论' : '评论' }} · {{ a.comment_count }}
               </button>
@@ -536,8 +841,11 @@ async function scrollToHashAnswer() {
           </template>
         </el-dialog>
 
-      <!-- 回答编辑器 -->
-      <div class="bb-card answer-editor">
+      <!-- 回答编辑器（已关闭的问题不接受新回答） -->
+      <div v-if="isClosed" class="bb-card answer-editor answer-editor-closed">
+        该问题已关闭，不再接受新回答。
+      </div>
+      <div v-else class="bb-card answer-editor">
         <h3>写下你的回答</h3>
         <el-input
           v-model="answerContent"
@@ -577,6 +885,10 @@ async function scrollToHashAnswer() {
   margin: 12px 0;
   color: var(--bb-text-tertiary);
   font-size: 13px;
+}
+
+.q-status-tag {
+  flex-shrink: 0;
 }
 
 .q-views {
@@ -640,6 +952,130 @@ async function scrollToHashAnswer() {
   gap: 16px;
   padding: 16px 20px;
   margin-bottom: 12px;
+
+  &.answer-accepted {
+    border-left: 3px solid var(--bb-primary, #409eff);
+    background: color-mix(in srgb, var(--bb-primary, #409eff) 4%, transparent);
+  }
+}
+
+.accepted-tag {
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.accepted-btn {
+  color: var(--bb-primary, #409eff);
+}
+
+.invite-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  margin-bottom: 12px;
+  border-left: 3px solid var(--bb-primary);
+}
+
+.invite-banner-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.invite-hint {
+  color: var(--bb-text-tertiary);
+  font-size: 13px;
+  margin: 0 0 10px;
+}
+
+.invite-loading {
+  padding: 16px 0;
+}
+
+.candidate-list {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.candidate-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--bb-border);
+}
+
+.candidate-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.candidate-name {
+  flex: 1;
+  color: var(--bb-text-main);
+}
+
+.candidate-empty {
+  color: var(--bb-text-tertiary);
+  padding: 12px 0;
+}
+
+.invite-results {
+  margin-top: 10px;
+}
+
+.invite-result-item {
+  font-size: 13px;
+  color: var(--bb-text-secondary);
+  padding: 3px 0;
+
+  &.failed {
+    color: var(--el-color-danger, #f56c6c);
+  }
+}
+
+.invite-record-card {
+  padding: 16px 20px;
+  margin-bottom: 12px;
+}
+
+.invite-record-title {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.invite-record-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.invite-record-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 14px;
+}
+
+.invite-record-name {
+  flex: 1;
+  color: var(--bb-text-main);
+}
+
+.invite-record-time {
+  color: var(--bb-text-tertiary);
+  font-size: 12px;
+}
+
+.answer-editor-closed {
+  color: var(--bb-text-tertiary);
+  text-align: center;
+  padding: 20px;
 }
 
 .a-vote {

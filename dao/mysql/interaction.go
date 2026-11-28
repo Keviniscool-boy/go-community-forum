@@ -301,14 +301,43 @@ func IsQuestionFollowed(userID, questionID int64) (bool, error) {
 }
 
 // ---------- 评论（点赞、删除、楼中楼见 comment.go） ----------
-
 // ---------- 通知 ----------
 
+// CreateNotification 独立写入通知（outbox worker 使用；自己给自己的动作不通知）
+func CreateNotification(n *models.Notification) error {
+	if n.UserID == n.ActorID {
+		return nil
+	}
+	_, err := db.Exec(
+		"INSERT INTO notification (notification_id, user_id, actor_id, type, target_type, target_id) VALUES (?, ?, ?, ?, ?, ?)",
+		n.NotificationID, n.UserID, n.ActorID, n.Type, n.TargetType, n.TargetID)
+	return err
+}
+
 // txCreateNotification 在互动事务内写入通知（自己给自己的动作不通知）
-// 通知与互动同事务：要么都成功要么都回滚，不允许先返回成功再静默丢通知
-func txCreateNotification(tx *sqlx.Tx, userID, actorID int64, notifyType int32, targetType int32, targetID int64) error {
+// 通知与互动同事务：要么都成功要么都回滚，不允许先返回成功再静默丢通知。
+// 拉黑期间（任一方拉黑对方）不产生新通知（PRD F2），历史通知保留。
+func txCreateNotification(tx TxLike, userID, actorID int64, notifyType int32, targetType int32, targetID int64) error {
 	if userID == actorID {
 		return nil
+	}
+	if blocked, err := isBlockedBetweenTx(tx, userID, actorID); err != nil {
+		return err
+	} else if blocked {
+		return nil
+	}
+	// 通知偏好（PRD F7）：写点收敛在此统一判断；不可关闭类型（follow/系统类）不受影响
+	if key := models.NotifySettingKey(notifyType); key != "" {
+		var raw []byte
+		if err := tx.QueryRow("SELECT notify_settings FROM user WHERE user_id = ?", userID).Scan(&raw); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+		if !models.NotifyEnabled(raw, key) {
+			return nil
+		}
 	}
 	_, err := tx.Exec(
 		"INSERT INTO notification (notification_id, user_id, actor_id, type, target_type, target_id) VALUES (?, ?, ?, ?, ?, ?)",
@@ -316,26 +345,93 @@ func txCreateNotification(tx *sqlx.Tx, userID, actorID int64, notifyType int32, 
 	return err
 }
 
-// ListNotifications 按 cursor 分页查询用户通知
-func ListNotifications(userID int64, cursorTime sql.NullTime, cursorID int64, limit int) (ns []*models.Notification, err error) {
-	ns = make([]*models.Notification, 0)
-	q := limit + 1
-	var query string
-	var args []interface{}
-	if cursorID == 0 {
-		query = `SELECT notification_id, user_id, actor_id, type, target_type, target_id, is_read, create_time
-			 FROM notification WHERE user_id = ?
-			 ORDER BY create_time DESC, notification_id DESC LIMIT ?`
-		args = []interface{}{userID, q}
-	} else {
-		query = `SELECT notification_id, user_id, actor_id, type, target_type, target_id, is_read, create_time
-			 FROM notification WHERE user_id = ?
-			 AND (create_time < ? OR (create_time = ? AND notification_id < ?))
-			 ORDER BY create_time DESC, notification_id DESC LIMIT ?`
-		args = []interface{}{userID, cursorTime.Time, cursorTime.Time, cursorID, q}
+// notifyNewAnswerTx 新回答通知：提问者 + 问题关注者（排除回答者自己；txCreateNotification 自带自通知跳过）
+func notifyNewAnswerTx(tx *sqlx.Tx, questionID, answerAuthorID int64) error {
+	var qAuthor int64
+	if err := tx.Get(&qAuthor, "SELECT author_id FROM question WHERE question_id = ?", questionID); err != nil {
+		return err
 	}
+	if err := txCreateNotification(tx, qAuthor, answerAuthorID, models.NotifyTypeNewAnswer, models.TargetQuestion, questionID); err != nil {
+		return err
+	}
+	var followerIDs []int64
+	if err := tx.Select(&followerIDs, "SELECT user_id FROM question_follow WHERE question_id = ?", questionID); err != nil {
+		return err
+	}
+	for _, uid := range followerIDs {
+		if uid == answerAuthorID || uid == qAuthor {
+			continue
+		}
+		if err := txCreateNotification(tx, uid, answerAuthorID, models.NotifyTypeNewAnswer, models.TargetQuestion, questionID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// NotifyNewAnswer 独立事务版本（审核批准路径使用）
+func NotifyNewAnswer(questionID, answerAuthorID int64) error {
+	tx, err := db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = notifyNewAnswerTx(tx, questionID, answerAuthorID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// ListNotifications 按 cursor 分页查询用户通知（typeFilter 空串=全部）
+func ListNotifications(userID int64, cursorTime sql.NullTime, cursorID int64, limit int, typeFilter string) (ns []*models.Notification, err error) {
+	ns = make([]*models.Notification, 0, limit)
+	q := limit + 1
+	where := "WHERE user_id = ?"
+	args := []interface{}{userID}
+	if typeFilter != "" {
+		where += " AND type = ?"
+		args = append(args, notificationTypeCode(typeFilter))
+	}
+	if cursorID > 0 {
+		where += " AND (create_time < ? OR (create_time = ? AND notification_id < ?))"
+		args = append(args, cursorTime.Time, cursorTime.Time, cursorID)
+	}
+	query := `SELECT notification_id, user_id, actor_id, type, target_type, target_id, is_read, create_time
+		 FROM notification ` + where + `
+		 ORDER BY create_time DESC, notification_id DESC LIMIT ?`
+	args = append(args, q)
 	err = db.Select(&ns, query, args...)
 	return
+}
+
+// NotificationTypeFilter 字符串过滤类型转编码；空串返回 0 表示不过滤
+func NotificationTypeFilter(s string) int32 {
+	switch s {
+	case "like":
+		return models.NotifyTypeLike
+	case "comment":
+		return models.NotifyTypeComment
+	case "follow":
+		return models.NotifyTypeFollow
+	case "collect":
+		return models.NotifyTypeCollect
+	case "dm":
+		return models.NotifyTypeDM
+	case "answer":
+		return models.NotifyTypeNewAnswer
+	case "invite":
+		return models.NotifyTypeAnswerInvite
+	case "invite_accepted":
+		return models.NotifyTypeInviteAccepted
+	case "invite_declined":
+		return models.NotifyTypeInviteDeclined
+	}
+	return 0
+}
+
+// notificationTypeCode 同 NotificationTypeFilter（dao 内使用）
+func notificationTypeCode(s string) int32 {
+	return NotificationTypeFilter(s)
 }
 
 // CountUnreadNotifications 查询未读通知数
@@ -343,6 +439,27 @@ func CountUnreadNotifications(userID int64) (int, error) {
 	var n int
 	err := db.Get(&n, "SELECT COUNT(notification_id) FROM notification WHERE user_id = ? AND is_read = 0", userID)
 	return n, err
+}
+
+// GetNotificationByID 查询单条通知（单条已读的归属校验用）
+func GetNotificationByID(notificationID int64) (*models.Notification, error) {
+	n := new(models.Notification)
+	err := db.Get(n, "SELECT notification_id, user_id, actor_id, type, target_type, target_id, is_read, create_time FROM notification WHERE notification_id = ?", notificationID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotificationNotExist
+		}
+		return nil, err
+	}
+	return n, nil
+}
+
+// ErrNotificationNotExist 通知不存在
+var ErrNotificationNotExist = errors.New("通知不存在")
+
+// CreateNotificationTx 导出的事务内通知写入（私信等跨域联动使用）
+func CreateNotificationTx(tx TxLike, userID, actorID int64, notifyType int32, targetType int32, targetID int64) error {
+	return txCreateNotification(tx, userID, actorID, notifyType, targetType, targetID)
 }
 
 // MarkAllNotificationsRead 全部标记已读

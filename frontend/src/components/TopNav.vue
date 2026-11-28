@@ -46,6 +46,8 @@ function onAvatarCommand(command: string) {
     router.push('/login')
   } else if (command === 'profile') {
     if (auth.user) router.push(`/users/${auth.user.user_id}`)
+  } else if (command === 'content') {
+    router.push('/me/content')
   } else if (command === 'settings') {
     router.push('/settings/profile')
   }
@@ -76,6 +78,7 @@ function onAvatarCommand(command: string) {
               <el-dropdown-menu>
                 <el-dropdown-item disabled>{{ auth.user.username }}</el-dropdown-item>
                 <el-dropdown-item divided command="profile">个人主页</el-dropdown-item>
+                <el-dropdown-item command="content">我的内容</el-dropdown-item>
                 <el-dropdown-item command="settings">编辑资料</el-dropdown-item>
                 <el-dropdown-item command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>

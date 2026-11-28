@@ -6,12 +6,14 @@ import (
 
 	"bluebell/dao/mysql"
 	"bluebell/models"
+
+	"github.com/jmoiron/sqlx"
 )
 
 // 通知相关
 
-// ListNotifications 用户通知列表（cursor 分页）
-func ListNotifications(userID int64, cursor string, limit int) (*models.PageResult[*models.ApiNotificationDetail], error) {
+// ListNotifications 用户通知列表（cursor 分页；typeFilter 非空时按类型过滤）
+func ListNotifications(userID int64, cursor string, limit int, typeFilter string) (*models.PageResult[*models.ApiNotificationDetail], error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -28,7 +30,7 @@ func ListNotifications(userID int64, cursor string, limit int) (*models.PageResu
 		cursorTime.Time = c.Time
 		cursorID = c.ID
 	}
-	ns, err := mysql.ListNotifications(userID, cursorTime, cursorID, limit)
+	ns, err := mysql.ListNotifications(userID, cursorTime, cursorID, limit, typeFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -50,24 +52,52 @@ func ListNotifications(userID int64, cursor string, limit int) (*models.PageResu
 	for _, u := range users {
 		actorMap[u.UserID] = u
 	}
-	// 回答类通知的 target_id 是回答 ID，补查所属问题 ID 供前端跳转（批量，避免 N+1）
+	// 邀请/新回答类通知（8-11）：批量关联问题标题与跳转 question_id
+	// type 8 target=question；type 9 target=invitation（需解析 question_id）；type 10/11 target=question
+	qInfo := loadQuestionInfoForNotifications(ns)
+	// 回答类通知的 target_id 是回答 ID，补查所属问题 ID 供前端跳转（main 第四阶段；批量避免 N+1）
 	answerIDs := make([]int64, 0, len(ns))
 	for _, n := range ns {
 		if n.TargetType == models.TargetAnswer {
 			answerIDs = append(answerIDs, n.TargetID)
 		}
 	}
-	questionIDs, err := mysql.AnswerQuestionIDs(answerIDs)
-	if err != nil {
-		return nil, err
+	questionIDs, qerr := mysql.AnswerQuestionIDs(answerIDs)
+	if qerr != nil {
+		return nil, qerr
 	}
+	// 展示层聚合（规格 10.1）：同批次内 type=赞同 且目标相同的通知合并为"某某等 N 人"，
+	// 不改变原始记录与审计事实；跨页不聚合
 	items := make([]*models.ApiNotificationDetail, 0, len(ns))
 	var last *models.Notification
 	for _, n := range ns {
+		if n.Type == models.NotifyTypeLike && len(items) > 0 {
+			prev := items[len(items)-1]
+			if prev.Type == models.NotifyTypeLike && prev.TargetType == n.TargetType && prev.TargetID == n.TargetID {
+				prev.AggCount++
+				continue
+			}
+		}
 		last = n
+		excerpt := notifyText(n.Type)
 		detail := &models.ApiNotificationDetail{
 			Notification: n,
-			Excerpt:      notifyText(n.Type),
+			Excerpt:      excerpt,
+			AggCount:     1,
+		}
+		if info := qInfo[key64(int64(n.Type), n.TargetID)]; info != nil {
+			if info.Title != "" {
+				detail.Excerpt = excerpt + "：" + truncateRunes(info.Title, 50)
+			}
+			if info.QuestionID != 0 {
+				detail.QuestionID = strconv.FormatInt(info.QuestionID, 10)
+			}
+			if n.Type == models.NotifyTypeNewAnswer && n.UserID == info.AuthorID {
+				detail.Excerpt = "回答了你的问题"
+				if info.Title != "" {
+					detail.Excerpt = "回答了你的问题：" + truncateRunes(info.Title, 50)
+				}
+			}
 		}
 		if u := actorMap[n.ActorID]; u != nil {
 			detail.ActorName = u.Username
@@ -99,6 +129,18 @@ func notifyText(t int32) string {
 		return "关注了你"
 	case models.NotifyTypeCollect:
 		return "收藏了你的回答"
+	case models.NotifyTypeAccept:
+		return "采纳了你的回答"
+	case models.NotifyTypeUnaccept:
+		return "撤销了对你回答的采纳"
+	case models.NotifyTypeNewAnswer:
+		return "回答了你的问题"
+	case models.NotifyTypeAnswerInvite:
+		return "邀请你回答"
+	case models.NotifyTypeInviteAccepted:
+		return "接受了你的回答邀请"
+	case models.NotifyTypeInviteDeclined:
+		return "婉拒了你的回答邀请"
 	case models.NotifyTypeCommentLike:
 		return "赞同了你的评论"
 	case models.NotifyTypeReply:
@@ -133,10 +175,20 @@ type ApiUserProfile struct {
 }
 
 // GetUserProfile 用户主页：基本信息 + 内容统计 + 关注关系
+// 被禁用账号统一按不存在处理（防枚举，与内容可见策略一致）
 func GetUserProfile(targetID int64, viewerID int64) (*ApiUserProfile, error) {
+	// 双向屏蔽统一按不存在处理（PRD F2 内容可见性；防关系探测）
+	if viewerID > 0 && viewerID != targetID {
+		if blocked, berr := mysql.IsBlockedBetween(targetID, viewerID); berr == nil && blocked {
+			return nil, mysql.ErrUserNotExist
+		}
+	}
 	user, err := mysql.GetUserDetailByID(targetID)
 	if err != nil {
 		return nil, err
+	}
+	if user.Status != 1 {
+		return nil, mysql.ErrUserNotExist
 	}
 	questionCount, err := mysql.CountUserQuestions(targetID)
 	if err != nil {
@@ -188,4 +240,102 @@ func ListUserAnswers(userID int64, limit int) (answers []*models.ApiAnswerDetail
 		limit = 20
 	}
 	return mysql.ListUserAnswers(userID, limit)
+}
+
+// ListUserArticles 用户的公开文章列表（用户主页作品聚合）
+func ListUserArticles(userID int64, limit int) (articles []*models.Article, err error) {
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	return mysql.ListArticlesByAuthor(userID, limit)
+}
+
+// ListUserColumns 用户的公开专栏列表（用户主页作品聚合）
+func ListUserColumns(userID int64, limit int) (columns []*models.Column, err error) {
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	columns, err = mysql.ListPublicColumnsByOwner(userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(columns) > limit {
+		columns = columns[:limit]
+	}
+	return columns, nil
+}
+
+// notifQuestionInfo 通知关联的问题信息
+type notifQuestionInfo struct {
+	Title     string
+	AuthorID  int64
+	QuestionID int64 // type 9 经邀请解析出的问题 id
+}
+
+func key64(a, b int64) string {
+	return strconv.FormatInt(a, 10) + ":" + strconv.FormatInt(b, 10)
+}
+
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
+}
+
+// loadQuestionInfoForNotifications 批量解析 8-11 类通知关联的问题（标题/作者/跳转 id）
+func loadQuestionInfoForNotifications(ns []*models.Notification) map[string]*notifQuestionInfo {
+	out := make(map[string]*notifQuestionInfo)
+	var questionIDs, invitationIDs []int64
+	seenQ, seenI := make(map[int64]struct{}), make(map[int64]struct{})
+	for _, n := range ns {
+		switch n.Type {
+		case models.NotifyTypeNewAnswer, models.NotifyTypeInviteAccepted, models.NotifyTypeInviteDeclined:
+			if _, ok := seenQ[n.TargetID]; !ok {
+				seenQ[n.TargetID] = struct{}{}
+				questionIDs = append(questionIDs, n.TargetID)
+			}
+		case models.NotifyTypeAnswerInvite:
+			if _, ok := seenI[n.TargetID]; !ok {
+				seenI[n.TargetID] = struct{}{}
+				invitationIDs = append(invitationIDs, n.TargetID)
+			}
+		}
+	}
+	if len(questionIDs) > 0 {
+		rows := make([]struct {
+			QuestionID int64  `db:"question_id"`
+			Title      string `db:"title"`
+			AuthorID   int64  `db:"author_id"`
+		}, 0)
+		query, args, err := sqlx.In("SELECT question_id, title, author_id FROM question WHERE question_id IN (?)", questionIDs)
+		if err == nil {
+			if err = mysql.GetGlobalDB().Select(&rows, query, args...); err == nil {
+				for _, r := range rows {
+					out[key64(models.NotifyTypeNewAnswer, r.QuestionID)] = &notifQuestionInfo{Title: r.Title, AuthorID: r.AuthorID, QuestionID: r.QuestionID}
+					out[key64(models.NotifyTypeInviteAccepted, r.QuestionID)] = &notifQuestionInfo{Title: r.Title, AuthorID: r.AuthorID, QuestionID: r.QuestionID}
+					out[key64(models.NotifyTypeInviteDeclined, r.QuestionID)] = &notifQuestionInfo{Title: r.Title, AuthorID: r.AuthorID, QuestionID: r.QuestionID}
+				}
+			}
+		}
+	}
+	if len(invitationIDs) > 0 {
+		rows := make([]struct {
+			InvitationID int64  `db:"invitation_id"`
+			QuestionID   int64  `db:"question_id"`
+			Title        string `db:"title"`
+		}, 0)
+		query, args, err := sqlx.In(`SELECT inv.invitation_id, inv.question_id, qu.title
+			FROM question_answer_invitation inv JOIN question qu ON qu.question_id = inv.question_id
+			WHERE inv.invitation_id IN (?)`, invitationIDs)
+		if err == nil {
+			if err = mysql.GetGlobalDB().Select(&rows, query, args...); err == nil {
+				for _, r := range rows {
+					out[key64(models.NotifyTypeAnswerInvite, r.InvitationID)] = &notifQuestionInfo{Title: r.Title, QuestionID: r.QuestionID}
+				}
+			}
+		}
+	}
+	return out
 }

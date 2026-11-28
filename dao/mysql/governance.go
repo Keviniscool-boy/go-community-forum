@@ -47,7 +47,7 @@ func ListReports(p *ReportPageParams) (reports []*models.Report, err error) {
 		where += " AND report_id < ?"
 		args = append(args, p.CursorID)
 	}
-	query := "SELECT report_id, reporter_id, target_type, target_id, reason_code, description, status, reviewer_id, review_note, created_at, reviewed_at FROM report " +
+	query := "SELECT report_id, reporter_id, target_type, target_id, reason_code, description, status, COALESCE(reviewer_id, 0) AS reviewer_id, review_note, created_at, reviewed_at FROM report " +
 		where + " ORDER BY report_id DESC LIMIT ?"
 	args = append(args, limit)
 	err = db.Select(&reports, query, args...)
@@ -57,7 +57,7 @@ func ListReports(p *ReportPageParams) (reports []*models.Report, err error) {
 // GetReportByID 查询单条举报
 func GetReportByID(reportID int64) (*models.Report, error) {
 	r := new(models.Report)
-	err := db.Get(r, "SELECT report_id, reporter_id, target_type, target_id, reason_code, description, status, reviewer_id, review_note, created_at, reviewed_at FROM report WHERE report_id = ?", reportID)
+	err := db.Get(r, "SELECT report_id, reporter_id, target_type, target_id, reason_code, description, status, COALESCE(reviewer_id, 0) AS reviewer_id, review_note, created_at, reviewed_at FROM report WHERE report_id = ?", reportID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrReportNotExist
@@ -95,6 +95,27 @@ func SetModeration(targetType int32, targetID int64, moderationStatus int32, ope
 	}
 	_, err := db.Exec(query, moderationStatus, operatorID, targetID)
 	return err
+}
+
+// SetModerationIfChanged 条件审核：状态未变化时返回 changed=false（重复 approve 不再重复通知/重算）
+func SetModerationIfChanged(targetType int32, targetID int64, moderationStatus int32, operatorID int64) (bool, error) {
+	var query string
+	switch targetType {
+	case models.ReportTargetQuestion:
+		query = "UPDATE question SET moderation_status = ?, updated_by = ? WHERE question_id = ? AND moderation_status <> ?"
+	case models.ReportTargetAnswer:
+		query = "UPDATE answer SET moderation_status = ?, updated_by = ? WHERE answer_id = ? AND moderation_status <> ?"
+	case models.ReportTargetComment:
+		query = "UPDATE comment SET moderation_status = ?, updated_by = ? WHERE comment_id = ? AND moderation_status <> ?"
+	default:
+		return false, ErrInvalidParams
+	}
+	result, err := db.Exec(query, moderationStatus, operatorID, targetID, moderationStatus)
+	if err != nil {
+		return false, err
+	}
+	n, _ := result.RowsAffected()
+	return n > 0, nil
 }
 
 // SetVisibility 管理员设置可见性
@@ -182,6 +203,13 @@ func logAdminAction(actorID int64, action, targetType, targetID, requestID strin
 	if err := CreateAuditLog(a); err != nil {
 		zap.L().Error("create audit log failed", zap.Error(err), zap.String("action", action))
 	}
+}
+
+// SensitiveWordsVersion 当前词表版本（缓存失效判定用）
+func SensitiveWordsVersion() (int64, error) {
+	var v int64
+	err := db.Get(&v, "SELECT COALESCE(MAX(version), 0) FROM sensitive_word")
+	return v, err
 }
 
 // LoadSensitiveWords 加载启用的敏感词与词表版本（version = MAX(version)）

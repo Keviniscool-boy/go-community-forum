@@ -39,6 +39,11 @@ func CreateQuestionHandler(c *gin.Context) {
 			ResponseError(c, CodeInvalidParams)
 			return
 		}
+		if errors.Is(err, logic.ErrModerationUnavailable) {
+			// fail-closed：审核组件故障时拒绝发布并明确提示，不放出未审核内容
+			ResponseErrorWithMsg(c, CodeServerBusy, err.Error())
+			return
+		}
 		ResponseError(c, CodeServerBusy)
 		return
 	}

@@ -44,8 +44,6 @@ definitions:
     - 1027
     - 1028
     - 1029
-    - 1030
-    format: int64
     type: integer
     x-enum-varnames:
     - CodeSuccess
@@ -78,7 +76,10 @@ definitions:
     - CodeResetTokenInvalid
     - CodeEmailConflict
     - CodeDraftConflict
+<<<<<<< HEAD
+=======
     - CodeCommentNotExist
+>>>>>>> feat/phase5-social-dm
   controller.Response:
     properties:
       code:

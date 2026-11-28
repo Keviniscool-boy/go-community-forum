@@ -183,3 +183,32 @@ type RecommendationEvent struct {
 }
 
 // RenderMarkdownSafe logic 层包装 sanitizer（避免 controller 直接依赖 pkg 内部实现细节）
+
+// ArticlePage 文章分页响应（Swagger）
+type ArticlePage struct {
+	Items      []*ApiArticleDetail `json:"items"`
+	NextCursor string              `json:"next_cursor"`
+	HasMore    bool                `json:"has_more"`
+}
+
+// ModerationAppeal 审核申诉
+type ModerationAppeal struct {
+	AppealID        int64      `json:"id,string" db:"appeal_id"`
+	AuthorID        int64      `json:"author_id,string" db:"author_id"`
+	TargetType      int32      `json:"target_type" db:"target_type"`
+	TargetID        int64      `json:"target_id,string" db:"target_id"`
+	DecisionVersion int64      `json:"decision_version" db:"decision_version"`
+	Reason          string     `json:"reason" db:"reason"`
+	Status          int32      `json:"status" db:"status"`
+	ReviewerID      int64      `json:"reviewer_id,string" db:"reviewer_id"`
+	Version         int64      `json:"version" db:"version"`
+	CreateTime      time.Time  `json:"create_time" db:"create_time"`
+	ReviewedAt      *time.Time `json:"reviewed_at" db:"reviewed_at"`
+}
+
+// 申诉状态
+const (
+	AppealPending  = 0
+	AppealUpheld   = 1 // 申诉成立（恢复内容）
+	AppealRejected = 2 // 申诉驳回（维持原判）
+)

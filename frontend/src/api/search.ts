@@ -2,11 +2,13 @@ import http from './http'
 
 // 搜索结果条目
 export interface SearchResultItem {
-  document_type: 'question' | 'answer' | 'user' | 'topic'
+  document_type: 'question' | 'answer' | 'article' | 'column' | 'user' | 'topic'
   document_id: string
   title: string
   excerpt: string
   author_id?: string
+  solved?: boolean // question：是否已解决
+  question_id?: string // answer：所属问题 id（跳转用）
   create_time: number
 }
 

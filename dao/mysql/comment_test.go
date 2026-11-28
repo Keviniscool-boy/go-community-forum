@@ -73,7 +73,7 @@ func TestCommentThreadLifecycle(t *testing.T) {
 	if n := queryCount(t, "SELECT reply_count FROM comment WHERE comment_id = 101"); n != 1 {
 		t.Fatalf("parent reply_count = %d, want 1", n)
 	}
-	if n := queryCount(t, "SELECT COUNT(*) FROM notification WHERE user_id = 2 AND actor_id = 3 AND type = 6"); n != 1 {
+	if n := queryCount(t, "SELECT COUNT(*) FROM notification WHERE user_id = 2 AND actor_id = 3 AND type = 13"); n != 1 {
 		t.Fatalf("reply notification to parent author = %d, want 1", n)
 	}
 	if n := queryCount(t, "SELECT COUNT(*) FROM notification WHERE user_id = 1 AND actor_id = 3 AND type = 2"); n != 1 {
@@ -96,13 +96,13 @@ func TestCommentThreadLifecycle(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if n := queryCount(t, "SELECT COUNT(*) FROM notification WHERE user_id = 3 AND actor_id = 1 AND type = 6"); n != 1 {
+	if n := queryCount(t, "SELECT COUNT(*) FROM notification WHERE user_id = 3 AND actor_id = 1 AND type = 13"); n != 1 {
 		t.Fatalf("reply-to-reply notification to replied user = %d, want 1", n)
 	}
-	if n := queryCount(t, "SELECT COUNT(*) FROM notification WHERE user_id = 2 AND actor_id = 1 AND type = 6"); n != 1 {
+	if n := queryCount(t, "SELECT COUNT(*) FROM notification WHERE user_id = 2 AND actor_id = 1 AND type = 13"); n != 1 {
 		t.Fatalf("reply-to-reply notification to root author = %d, want 1", n)
 	}
-	replies, err := ListCommentReplies(101, sql.NullTime{}, 0, 20)
+	replies, err := ListCommentReplies(101, 0, sql.NullTime{}, 0, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestCommentThreadLifecycle(t *testing.T) {
 	if n := queryCount(t, "SELECT like_count FROM comment WHERE comment_id = 101"); n != 1 {
 		t.Fatalf("like_count = %d, want 1", n)
 	}
-	if n := queryCount(t, "SELECT COUNT(*) FROM notification WHERE user_id = 2 AND actor_id = 1 AND type = 5"); n != 1 {
+	if n := queryCount(t, "SELECT COUNT(*) FROM notification WHERE user_id = 2 AND actor_id = 1 AND type = 12"); n != 1 {
 		t.Fatalf("comment like notification = %d, want 1", n)
 	}
 	if err := SetCommentLike(3, 101, true); err != nil {
@@ -179,7 +179,7 @@ func TestCommentThreadLifecycle(t *testing.T) {
 	if len(top) != 1 || top[0].CommentID != 101 || !top[0].DeletedAt.Valid || top[0].ReplyCount != 3 {
 		t.Fatalf("deleted comment with replies should be kept as placeholder, got %+v", top)
 	}
-	if replies, err = ListCommentReplies(101, sql.NullTime{}, 0, 20); err != nil || len(replies) != 3 {
+	if replies, err = ListCommentReplies(101, 0, sql.NullTime{}, 0, 20); err != nil || len(replies) != 3 {
 		t.Fatalf("replies under deleted comment must remain, got %d err=%v", len(replies), err)
 	}
 
@@ -295,7 +295,7 @@ func TestCommentCursorPagination(t *testing.T) {
 	cursorID = 0
 	cursorTime = sql.NullTime{}
 	for {
-		rows, err := ListCommentReplies(200, cursorTime, cursorID, 2)
+		rows, err := ListCommentReplies(200, 0, cursorTime, cursorID, 2)
 		if err != nil {
 			t.Fatal(err)
 		}

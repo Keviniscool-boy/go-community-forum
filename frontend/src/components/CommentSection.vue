@@ -11,8 +11,8 @@ import {
   likeComment,
   unlikeComment,
   deleteComment,
-  type CommentDetail,
-} from '@/api/interaction'
+  editComment,
+  type CommentDetail } from '@/api/interaction'
 import { createReport } from '@/api/productivity'
 import { ApiError } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
@@ -198,6 +198,19 @@ async function toggleLike(cm: CommentDetail) {
   }
 }
 
+// 编辑评论（PRD F4）：保存后本地更新内容与已编辑标记；窗口外由后端拒绝
+async function saveEdit(cm: CommentDetail, content: string) {
+  try {
+    await editComment(cm.id, content)
+    cm.content = content
+    cm.edited = true
+    cm.can_edit = false // 编辑后窗口按创建时间计算，保守关闭入口
+    ElMessage.success('评论已更新')
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  }
+}
+
 async function remove(cm: CommentDetail) {
   const isTopLevel = cm.parent_id === '0'
   const tip = isTopLevel ? '删除后这条评论将不再展示，其下已有的回复会保留。' : '删除后这条回复将不再展示。'
@@ -279,6 +292,7 @@ defineExpose({ reload: () => load(true) })
         @reply="startReply(cm)"
         @delete="remove(cm)"
         @report="openReport(cm)"
+        @edit="(content) => saveEdit(cm, content)"
       />
 
       <!-- 楼中楼 -->
@@ -296,6 +310,7 @@ defineExpose({ reload: () => load(true) })
             @reply="startReply(r)"
             @delete="remove(r)"
             @report="openReport(r)"
+            @edit="(content) => saveEdit(r, content)"
           />
           <div v-if="threads[cm.id]?.loading" class="cs-hint"><LoadingState text="加载回复中…" /></div>
           <div v-else-if="threads[cm.id]?.loaded && threads[cm.id]?.replies.length === 0" class="cs-hint">回复已全部删除</div>

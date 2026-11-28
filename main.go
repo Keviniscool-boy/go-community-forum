@@ -15,6 +15,7 @@ import (
 	"bluebell/dao/mysql"
 	"bluebell/dao/redis"
 	"bluebell/logger"
+	"bluebell/logic"
 	"bluebell/pkg/mail"
 	"bluebell/pkg/search"
 	"bluebell/pkg/snowflake"
@@ -108,6 +109,11 @@ func main() {
 		return
 	}
 
+	// 6.041 注入 token 版本缓存失效函数（账号注销去标识化时调用）
+	mysql.SetTokenVerCacheInvalidator(func(userID int64) {
+		redis.InvalidateTokenVersionCache(userID)
+	})
+
 	// 6.05 搜索实现：MySQL fallback（生产可替换 ES 适配器）
 	controller.InitSearchIndex(&search.MySQLFallback{DB: mysql.GetDB()})
 
@@ -124,6 +130,12 @@ func main() {
 			}
 		}
 	}
+
+	// 6.1 后台 workers：outbox 投递 + 保留期清理（B07）
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
+	go logic.StartOutboxWorker(workerCtx, 10*time.Second)
+	go logic.StartRetentionWorker(workerCtx, time.Hour)
 
 	// 7.注册路由
 	r := routes.Setup()

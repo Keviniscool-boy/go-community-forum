@@ -6,7 +6,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"bluebell/dao/mysql"
 	"bluebell/logic"
+	"bluebell/models"
 )
 
 // resolveRequest 审核处理请求体
@@ -184,4 +186,45 @@ func AdminMetricsHandler(c *gin.Context) {
 		return
 	}
 	ResponseSuccess(c, data)
+}
+
+// AdminAggregateMetricsHandler 触发内容逐日指标聚合（幂等重算，metric_version 递增）
+func AdminAggregateMetricsHandler(c *gin.Context) {
+	if _, err := getCurrentUserID(c); err != nil {
+		ResponseError(c, CodeNeedLogin)
+		return
+	}
+	days := atoiDefault(c.Query("days"), 30)
+	version, err := logic.AggregateMetrics(days)
+	if err != nil {
+		zap.L().Error("logic.AggregateMetrics failed", zap.Error(err))
+		ResponseError(c, CodeServerBusy)
+		return
+	}
+	ResponseSuccess(c, gin.H{"metric_version": version})
+}
+
+// ListMyReportsHandler 本人举报状态
+func ListMyReportsHandler(c *gin.Context) {
+	userID, err := getCurrentUserID(c)
+	if err != nil {
+		ResponseError(c, CodeNeedLogin)
+		return
+	}
+	cursorID, _ := strconv.ParseInt(c.Query("cursor"), 10, 64)
+	limit := atoiDefault(c.Query("limit"), 20)
+	statusPtr := (*int32)(nil) // 全部
+	reports, err := mysql.ListReports(&mysql.ReportPageParams{Status: statusPtr, CursorID: cursorID, Limit: limit})
+	if err != nil {
+		ResponseError(c, CodeServerBusy)
+		return
+	}
+	// 只返回本人提交的举报
+	out := make([]*models.ApiReportDetail, 0)
+	for _, r := range reports {
+		if r.ReporterID == userID {
+			out = append(out, &models.ApiReportDetail{Report: r})
+		}
+	}
+	ResponseSuccess(c, out)
 }

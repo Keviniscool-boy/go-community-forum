@@ -3,12 +3,14 @@ package mysql
 import (
 	"database/sql"
 	"errors"
+	"strconv"
 	"fmt"
 	"time"
 
 	"bluebell/models"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -99,7 +101,7 @@ func Login(user *models.User) (err error) {
 // GetUserByID 根据用户id查询用户信息
 func GetUserByID(id int64) (user *models.User, err error) {
 	user = new(models.User)
-	sqlStr := "SELECT user_id, username, role FROM user WHERE user_id = ?"
+	sqlStr := "SELECT user_id, username, role, status FROM user WHERE user_id = ?"
 	if err = db.Get(user, sqlStr, id); err != nil {
 		return nil, err
 	}
@@ -214,36 +216,56 @@ func UpdatePasswordByEmail(email, plainPassword string) (bool, error) {
 	return n > 0, nil
 }
 
-// CountUserQuestions 用户提问数
+// CountUserQuestions 用户公开提问数（统一可见条件：审核通过/公开/未删除/作者有效，
+// 与 ListUserQuestions 及主页列表口径一致，防止统计与列表不一致或泄露被隔离内容）
 func CountUserQuestions(userID int64) (int, error) {
 	var n int
-	err := db.Get(&n, "SELECT COUNT(question_id) FROM question WHERE author_id = ? AND status = 1", userID)
+	err := db.Get(&n, `SELECT COUNT(q.question_id) FROM question q
+		JOIN user u ON u.user_id = q.author_id AND u.status = 1
+		WHERE q.author_id = ? AND q.status = 1 AND q.moderation_status = 1
+		AND q.visibility = 1 AND q.deleted_at IS NULL`, userID)
 	return n, err
 }
 
-// CountUserAnswers 用户回答数
+// CountUserAnswers 用户公开回答数（含所属问题可见性，防止从主页旁路读到隐藏问题的回答）
 func CountUserAnswers(userID int64) (int, error) {
 	var n int
-	err := db.Get(&n, "SELECT COUNT(answer_id) FROM answer WHERE author_id = ? AND status = 1", userID)
+	err := db.Get(&n, `SELECT COUNT(a.answer_id) FROM answer a
+		JOIN question qu ON qu.question_id = a.question_id AND qu.status = 1
+			AND qu.moderation_status = 1 AND qu.visibility = 1 AND qu.deleted_at IS NULL
+		JOIN user u ON u.user_id = a.author_id AND u.status = 1
+		WHERE a.author_id = ? AND a.status = 1 AND a.moderation_status = 1
+		AND a.visibility = 1 AND a.deleted_at IS NULL`, userID)
 	return n, err
 }
 
 // ListUserQuestions 用户的提问列表（最新优先）
 func ListUserQuestions(userID int64, limit int) (questions []*models.Question, err error) {
 	questions = make([]*models.Question, 0, limit)
-	err = db.Select(&questions, `SELECT question_id, title, description, author_id, answer_count,
-		comment_count, follower_count, view_count, status, create_time
-		FROM question WHERE author_id = ? AND status = 1 ORDER BY create_time DESC LIMIT ?`, userID, limit)
+	// 统一公开可见条件：主页是公开入口，隔离/隐藏/已删除问题不得出现
+	err = db.Select(&questions, `SELECT q.question_id, q.title, q.description, q.author_id, q.answer_count,
+		q.comment_count, q.follower_count, q.view_count, q.status, q.resolution_status,
+		COALESCE(q.accepted_answer_id, 0) AS accepted_answer_id, q.create_time, q.update_time
+		FROM question q JOIN user u ON u.user_id = q.author_id AND u.status = 1
+		WHERE q.author_id = ? AND q.status = 1 AND q.moderation_status = 1
+		AND q.visibility = 1 AND q.deleted_at IS NULL
+		ORDER BY q.create_time DESC, q.question_id DESC LIMIT ?`, userID, limit)
 	return
 }
 
 // ListUserAnswers 用户的回答列表（带所属问题标题）
 func ListUserAnswers(userID int64, limit int) (answers []*models.ApiAnswerDetail, err error) {
 	answers = make([]*models.ApiAnswerDetail, 0, limit)
+	// 统一公开可见条件：回答本身公开 + 所属问题公开 + 作者有效
 	err = db.Select(&answers, `SELECT a.answer_id, a.question_id, a.author_id, a.content, a.vote_count,
 		a.comment_count, a.collect_count, a.status, a.create_time, qu.title AS question_title
-		FROM answer a JOIN question qu ON qu.question_id = a.question_id
-		WHERE a.author_id = ? AND a.status = 1 ORDER BY a.create_time DESC LIMIT ?`, userID, limit)
+		FROM answer a
+		JOIN question qu ON qu.question_id = a.question_id AND qu.status = 1
+			AND qu.moderation_status = 1 AND qu.visibility = 1 AND qu.deleted_at IS NULL
+		JOIN user u ON u.user_id = a.author_id AND u.status = 1
+		WHERE a.author_id = ? AND a.status = 1 AND a.moderation_status = 1
+		AND a.visibility = 1 AND a.deleted_at IS NULL
+		ORDER BY a.create_time DESC, a.answer_id DESC LIMIT ?`, userID, limit)
 	return
 }
 
@@ -339,4 +361,95 @@ func IncrementTokenVersion(userID int64) (int, error) {
 		return 0, err
 	}
 	return version, err
+}
+
+// followListRow 列表扫描行（uf.id 作稳定游标键）
+type followListRow struct {
+	FollowID  int64     `db:"follow_id"`
+	UserID    int64     `db:"user_id"`
+	Username  string    `db:"username"`
+	AvatarURL string    `db:"avatar_url"`
+	Bio       string    `db:"bio"`
+}
+
+// ListFollowers 粉丝列表（关注 targetID 的人；被封禁用户不出现；PRD F1）
+func ListFollowers(targetID int64, viewerID int64, cursorID int64, limit int) (items []*models.FollowListUser, err error) {
+	return listFollowRelations("following_id", "follower_id", targetID, viewerID, cursorID, limit)
+}
+
+// ListFollowing 关注列表（targetID 关注的人）
+func ListFollowing(targetID int64, viewerID int64, cursorID int64, limit int) (items []*models.FollowListUser, err error) {
+	return listFollowRelations("follower_id", "following_id", targetID, viewerID, cursorID, limit)
+}
+
+// listFollowRelations 关系列表公共实现
+// relCol: 目标列（following_id=粉丝列表 / follower_id=关注列表），userCol: 结果用户列
+// 游标键为 user_follow.id（自增，稳定倒序）
+func listFollowRelations(relCol, userCol string, targetID int64, viewerID int64, cursorID int64, limit int) (items []*models.FollowListUser, err error) {
+	items = make([]*models.FollowListUser, 0)
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	query := `SELECT uf.id AS follow_id, u.user_id, u.username, u.avatar_url, u.bio
+		FROM user_follow uf JOIN user u ON u.user_id = uf.` + userCol + ` AND u.status = 1
+		WHERE uf.` + relCol + ` = ?`
+	args := []interface{}{targetID}
+	if cursorID > 0 {
+		query += " AND uf.id < ?"
+		args = append(args, cursorID)
+	}
+	query += " ORDER BY uf.id DESC LIMIT ?"
+	args = append(args, limit+1)
+
+	rows := make([]*followListRow, 0, limit+1)
+	if err = db.Select(&rows, query, args...); err != nil {
+		return nil, err
+	}
+	// 登录视角批量查询 is_following（避免 N+1）
+	followSet := make(map[int64]struct{}, len(rows))
+	if viewerID > 0 && len(rows) > 0 {
+		ids := make([]int64, 0, len(rows))
+		for _, r := range rows {
+			ids = append(ids, r.UserID)
+		}
+		q, a, err2 := sqlx.In("SELECT following_id FROM user_follow WHERE follower_id = ? AND following_id IN (?)", viewerID, ids)
+		if err2 == nil {
+			var followed []int64
+			if err2 = db.Select(&followed, q, a...); err2 == nil {
+				for _, fid := range followed {
+					followSet[fid] = struct{}{}
+				}
+			}
+		}
+	}
+	for _, r := range rows {
+		_, followed := followSet[r.UserID]
+		items = append(items, &models.FollowListUser{
+			UserID:      strconv.FormatInt(r.UserID, 10),
+			Username:    r.Username,
+			AvatarURL:   r.AvatarURL,
+			Bio:         r.Bio,
+			IsFollowing: followed,
+		})
+	}
+	return items, nil
+}
+
+// GetNotifySettingsRaw 读取通知偏好原始 JSON（"null" 表示全部开启）
+func GetNotifySettingsRaw(userID int64) ([]byte, error) {
+	var raw []byte
+	err := db.Get(&raw, "SELECT COALESCE(notify_settings, 'null') FROM user WHERE user_id = ?", userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotExist
+		}
+		return nil, err
+	}
+	return raw, nil
+}
+
+// SetNotifySettings 写入通知偏好 JSON（PRD F7）
+func SetNotifySettings(userID int64, raw []byte) error {
+	_, err := db.Exec("UPDATE user SET notify_settings = CAST(? AS JSON) WHERE user_id = ? AND status = 1", raw, userID)
+	return err
 }
