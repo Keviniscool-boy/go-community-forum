@@ -134,6 +134,12 @@ type ApiUserProfile struct {
 
 // GetUserProfile 用户主页：基本信息 + 内容统计 + 关注关系
 func GetUserProfile(targetID int64, viewerID int64) (*ApiUserProfile, error) {
+	// 双向屏蔽统一按不存在处理（PRD F2 内容可见性；防关系探测）
+	if viewerID > 0 && viewerID != targetID {
+		if blocked, berr := mysql.IsBlockedBetween(targetID, viewerID); berr == nil && blocked {
+			return nil, mysql.ErrUserNotExist
+		}
+	}
 	user, err := mysql.GetUserDetailByID(targetID)
 	if err != nil {
 		return nil, err

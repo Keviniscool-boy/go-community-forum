@@ -47,7 +47,7 @@ func TestModerationVisibilityGovernance(t *testing.T) {
 	mustExec(t, "INSERT INTO question (question_id, title, description, author_id, visibility) VALUES (4, 'hidden-q', 'd', ?, 0)", uid)
 
 	// Feed 只含 approved 公开内容
-	rows, err := LatestFeedPage(time.Time{}, "", 0, 50)
+	rows, err := LatestFeedPage(time.Time{}, "", 0, 50, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestModerationVisibilityGovernance(t *testing.T) {
 
 	// 作者被禁用后内容从 Feed 消失
 	mustExec(t, "UPDATE user SET status = 0 WHERE user_id = ?", uid)
-	rows, err = LatestFeedPage(time.Time{}, "", 0, 50)
+	rows, err = LatestFeedPage(time.Time{}, "", 0, 50, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

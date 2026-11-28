@@ -68,7 +68,7 @@ func TestFollowingFeedPagination(t *testing.T) {
 	seen := make(map[int64]bool)
 	cursorTime, cursorType, cursorID, total := time.Time{}, "", int64(0), 0
 	for page := 0; page < 10; page++ {
-		rows, err := FollowingFeedPage([]int64{authorA, authorB}, cursorTime, cursorType, cursorID, 4)
+		rows, err := FollowingFeedPage([]int64{authorA, authorB}, cursorTime, cursorType, cursorID, 4, 0)
 		if err != nil {
 			t.Fatalf("page %d: %v", page, err)
 		}
@@ -96,7 +96,7 @@ func TestFollowingFeedPagination(t *testing.T) {
 	}
 
 	// 排序检查：create_time 降序，同秒内 item_id 严格降序（total order，不漏不重）
-	rows, err := FollowingFeedPage([]int64{authorA, authorB}, time.Time{}, "", 0, 100)
+	rows, err := FollowingFeedPage([]int64{authorA, authorB}, time.Time{}, "", 0, 100, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

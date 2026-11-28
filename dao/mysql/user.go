@@ -3,12 +3,14 @@ package mysql
 import (
 	"database/sql"
 	"errors"
+	"strconv"
 	"fmt"
 	"time"
 
 	"bluebell/models"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -339,4 +341,76 @@ func IncrementTokenVersion(userID int64) (int, error) {
 		return 0, err
 	}
 	return version, err
+}
+
+// followListRow 列表扫描行（uf.id 作稳定游标键）
+type followListRow struct {
+	FollowID  int64     `db:"follow_id"`
+	UserID    int64     `db:"user_id"`
+	Username  string    `db:"username"`
+	AvatarURL string    `db:"avatar_url"`
+	Bio       string    `db:"bio"`
+}
+
+// ListFollowers 粉丝列表（关注 targetID 的人；被封禁用户不出现；PRD F1）
+func ListFollowers(targetID int64, viewerID int64, cursorID int64, limit int) (items []*models.FollowListUser, err error) {
+	return listFollowRelations("following_id", "follower_id", targetID, viewerID, cursorID, limit)
+}
+
+// ListFollowing 关注列表（targetID 关注的人）
+func ListFollowing(targetID int64, viewerID int64, cursorID int64, limit int) (items []*models.FollowListUser, err error) {
+	return listFollowRelations("follower_id", "following_id", targetID, viewerID, cursorID, limit)
+}
+
+// listFollowRelations 关系列表公共实现
+// relCol: 目标列（following_id=粉丝列表 / follower_id=关注列表），userCol: 结果用户列
+// 游标键为 user_follow.id（自增，稳定倒序）
+func listFollowRelations(relCol, userCol string, targetID int64, viewerID int64, cursorID int64, limit int) (items []*models.FollowListUser, err error) {
+	items = make([]*models.FollowListUser, 0)
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	query := `SELECT uf.id AS follow_id, u.user_id, u.username, u.avatar_url, u.bio
+		FROM user_follow uf JOIN user u ON u.user_id = uf.` + userCol + ` AND u.status = 1
+		WHERE uf.` + relCol + ` = ?`
+	args := []interface{}{targetID}
+	if cursorID > 0 {
+		query += " AND uf.id < ?"
+		args = append(args, cursorID)
+	}
+	query += " ORDER BY uf.id DESC LIMIT ?"
+	args = append(args, limit+1)
+
+	rows := make([]*followListRow, 0, limit+1)
+	if err = db.Select(&rows, query, args...); err != nil {
+		return nil, err
+	}
+	// 登录视角批量查询 is_following（避免 N+1）
+	followSet := make(map[int64]struct{}, len(rows))
+	if viewerID > 0 && len(rows) > 0 {
+		ids := make([]int64, 0, len(rows))
+		for _, r := range rows {
+			ids = append(ids, r.UserID)
+		}
+		q, a, err2 := sqlx.In("SELECT following_id FROM user_follow WHERE follower_id = ? AND following_id IN (?)", viewerID, ids)
+		if err2 == nil {
+			var followed []int64
+			if err2 = db.Select(&followed, q, a...); err2 == nil {
+				for _, fid := range followed {
+					followSet[fid] = struct{}{}
+				}
+			}
+		}
+	}
+	for _, r := range rows {
+		_, followed := followSet[r.UserID]
+		items = append(items, &models.FollowListUser{
+			UserID:      strconv.FormatInt(r.UserID, 10),
+			Username:    r.Username,
+			AvatarURL:   r.AvatarURL,
+			Bio:         r.Bio,
+			IsFollowing: followed,
+		})
+	}
+	return items, nil
 }

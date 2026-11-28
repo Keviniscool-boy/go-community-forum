@@ -61,7 +61,8 @@ func GetQuestionPublicByID(id int64, viewerID int64) (q *models.Question, err er
 		      FROM question q JOIN user u ON u.user_id = q.author_id AND u.status = 1
 		      WHERE q.question_id = ? AND q.status = 1
 		      AND q.moderation_status = 1 AND q.deleted_at IS NULL
-		      AND (q.visibility = 1 OR (q.visibility = 2 AND q.author_id = ?))`
+		      AND (q.visibility = 1 OR (q.visibility = 2 AND q.author_id = ?))` +
+		FilterBlockViewerSQL(viewerID, "q.author_id")
 	if err = db.Get(q, sqlStr, id, viewerID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrQuestionNotExist

@@ -79,15 +79,24 @@ func Setup() *gin.Engine {
 	v1.GET("/comments/:id/replies", middlewares.OptionalAuthMiddleware(), controller.ListCommentRepliesHandler)
 	v1.POST("/comments/:id/like", middlewares.JWTAuthMiddleware(), controller.LikeCommentHandler)
 	v1.DELETE("/comments/:id/like", middlewares.JWTAuthMiddleware(), controller.UnlikeCommentHandler)
+	v1.PATCH("/comments/:id", middlewares.JWTAuthMiddleware(), controller.EditCommentHandler)
 	v1.DELETE("/comments/:id", middlewares.JWTAuthMiddleware(), controller.DeleteCommentHandler)
 
 	// 通知相关路由
 	v1.GET("/notifications", middlewares.JWTAuthMiddleware(), controller.ListNotificationsHandler)
+	v1.PATCH("/notifications/:id/read", middlewares.JWTAuthMiddleware(), controller.MarkNotificationReadHandler)
 	v1.GET("/notifications/unread-count", middlewares.JWTAuthMiddleware(), controller.UnreadCountHandler)
 	v1.POST("/notifications/read-all", middlewares.JWTAuthMiddleware(), controller.MarkAllNotificationsReadHandler)
 
 	// 用户主页路由
 	v1.GET("/users/:id", controller.GetUserProfileHandler)
+	// 第五阶段 M1：关注/粉丝列表（静态段注册在 :id 之后不影响——Gin 静态优先）
+	v1.GET("/users/:id/followers", controller.ListUserFollowersHandler)
+	v1.GET("/users/:id/following", controller.ListUserFollowingHandler)
+	v1.GET("/users/:id/interactions", middlewares.JWTAuthMiddleware(), controller.GetUserInteractionsHandler)
+	v1.POST("/users/:id/block", middlewares.JWTAuthMiddleware(), controller.BlockUserHandler)
+	v1.DELETE("/users/:id/block", middlewares.JWTAuthMiddleware(), controller.UnblockUserHandler)
+	v1.GET("/users/blocks", middlewares.JWTAuthMiddleware(), controller.ListUserBlocksHandler)
 	v1.GET("/users/:id/questions", controller.ListUserQuestionsHandler)
 	v1.GET("/users/:id/answers", controller.ListUserAnswersHandler)
 

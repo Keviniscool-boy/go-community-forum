@@ -305,9 +305,15 @@ func IsQuestionFollowed(userID, questionID int64) (bool, error) {
 // ---------- 通知 ----------
 
 // txCreateNotification 在互动事务内写入通知（自己给自己的动作不通知）
-// 通知与互动同事务：要么都成功要么都回滚，不允许先返回成功再静默丢通知
+// 通知与互动同事务：要么都成功要么都回滚，不允许先返回成功再静默丢通知。
+// 拉黑期间（任一方拉黑对方）不产生新通知（PRD F2），历史通知保留。
 func txCreateNotification(tx *sqlx.Tx, userID, actorID int64, notifyType int32, targetType int32, targetID int64) error {
 	if userID == actorID {
+		return nil
+	}
+	if blocked, err := isBlockedBetweenTx(tx, userID, actorID); err != nil {
+		return err
+	} else if blocked {
 		return nil
 	}
 	_, err := tx.Exec(
@@ -343,6 +349,34 @@ func CountUnreadNotifications(userID int64) (int, error) {
 	var n int
 	err := db.Get(&n, "SELECT COUNT(notification_id) FROM notification WHERE user_id = ? AND is_read = 0", userID)
 	return n, err
+}
+
+// GetNotificationByID 查询单条通知（单条已读的归属校验用）
+func GetNotificationByID(notificationID int64) (*models.Notification, error) {
+	n := new(models.Notification)
+	err := db.Get(n, "SELECT notification_id, user_id, actor_id, type, target_type, target_id, is_read, create_time FROM notification WHERE notification_id = ?", notificationID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotificationNotExist
+		}
+		return nil, err
+	}
+	return n, nil
+}
+
+// ErrNotificationNotExist 通知不存在
+var ErrNotificationNotExist = errors.New("通知不存在")
+
+// MarkNotificationRead 单条已读（PRD F3）：仅接收人本人可操作；幂等
+func MarkNotificationRead(notificationID, userID int64) (bool, error) {
+	result, err := db.Exec(
+		"UPDATE notification SET is_read = 1 WHERE notification_id = ? AND user_id = ?",
+		notificationID, userID)
+	if err != nil {
+		return false, err
+	}
+	n, _ := result.RowsAffected()
+	return n > 0, nil
 }
 
 // MarkAllNotificationsRead 全部标记已读

@@ -55,10 +55,15 @@ func int64sToArgs(ids []int64) []interface{} {
 
 // LatestFeedPage 最新 Feed：按 (create_time, item_type, item_id) 降序 cursor 分页
 // WHERE 的游标比较与 ORDER BY 使用同一字典序；item_type 保证跨类型行也全序
-func LatestFeedPage(cursorTime time.Time, cursorType string, cursorID int64, limit int) (rows []*FeedRow, err error) {
+func LatestFeedPage(cursorTime time.Time, cursorType string, cursorID int64, limit int, viewerID int64) (rows []*FeedRow, err error) {
 	rows = make([]*FeedRow, 0, limit)
 	qCond := "1 = 1"
 	aCond := "1 = 1"
+	// 拉黑过滤（PRD F2）：viewer 拉黑的作者不出现（keyset 序不变，被过滤行自然跳过）
+	if viewerID > 0 {
+		qCond += FilterBlockViewerSQL(viewerID, "q.author_id")
+		aCond += FilterBlockViewerSQL(viewerID, "a.author_id")
+	}
 	args := make([]interface{}, 0, 12)
 	if cursorID > 0 {
 		qCond = "(q.create_time < ? OR (q.create_time = ? AND ('question' < ? OR ('question' = ? AND q.question_id < ?))))"
@@ -76,7 +81,7 @@ func LatestFeedPage(cursorTime time.Time, cursorType string, cursorID int64, lim
 // 参数顺序必须与 SQL 占位符顺序一致：
 //   第一段 SELECT：q.author_id IN (...) → 游标 5 个；
 //   第二段 SELECT：a.author_id IN (...) → 游标 5 个
-func FollowingFeedPage(authorIDs []int64, cursorTime time.Time, cursorType string, cursorID int64, limit int) (rows []*FeedRow, err error) {
+func FollowingFeedPage(authorIDs []int64, cursorTime time.Time, cursorType string, cursorID int64, limit int, viewerID int64) (rows []*FeedRow, err error) {
 	rows = make([]*FeedRow, 0, limit)
 	// IN 占位符
 	placeholders := ""
@@ -88,6 +93,11 @@ func FollowingFeedPage(authorIDs []int64, cursorTime time.Time, cursorType strin
 	}
 	qCond := "q.author_id IN (" + placeholders + ")"
 	aCond := "a.author_id IN (" + placeholders + ")"
+	// 拉黑过滤（PRD F2）：关注关系在拉黑时已解除，此处兜底（keyset 序不变）
+	if viewerID > 0 {
+		qCond += FilterBlockViewerSQL(viewerID, "q.author_id")
+		aCond += FilterBlockViewerSQL(viewerID, "a.author_id")
+	}
 	if cursorID > 0 {
 		qCond += " AND (q.create_time < ? OR (q.create_time = ? AND ('question' < ? OR ('question' = ? AND q.question_id < ?))))"
 		aCond += " AND (a.create_time < ? OR (a.create_time = ? AND ('answer' < ? OR ('answer' = ? AND a.answer_id < ?))))"

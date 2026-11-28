@@ -247,7 +247,7 @@ func sliceFeedPage(entries []cachedFeedEntry, offset, limit int) (items []*model
 }
 
 // GetHotFeed 热榜（游标绑定缓存快照版本，快照刷新后旧游标返回可重试错误）
-func GetHotFeed(cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
+func GetHotFeed(viewerID int64, cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -258,7 +258,7 @@ func GetHotFeed(cursor string, limit int) (*models.PageResult[*models.FeedItem],
 	if err != nil {
 		return nil, err
 	}
-	items, hasMore := sliceFeedPage(snap.Entries, offset, limit)
+	items, hasMore := sliceFeedPage(filterEntriesByBlocks(snap.Entries, viewerID), offset, limit)
 	next := ""
 	if hasMore {
 		next = encodeOffsetCursor(offset+limit, snap.Version, 0)
@@ -292,7 +292,7 @@ func GetRecommendFeed(userID int64, cursor string, limit int) (*models.PageResul
 			followed[id] = struct{}{}
 		}
 	}
-	items, hasMore := recommendPage(snap.Entries, followed, offset, limit)
+	items, hasMore := recommendPage(filterEntriesByBlocks(snap.Entries, userID), followed, offset, limit)
 	next := ""
 	if hasMore {
 		next = encodeOffsetCursor(offset+limit, snap.Version, userID)
@@ -302,6 +302,30 @@ func GetRecommendFeed(userID int64, cursor string, limit int) (*models.PageResul
 		NextCursor: next,
 		HasMore:    hasMore,
 	}, nil
+}
+
+// filterEntriesByBlocks 热榜/推荐缓存的读时拉黑过滤（PRD F2）：
+// 快照跨用户共享，过滤只能按 viewer 在读取时做；offset 游标在过滤后的列表上保持一致
+// （同一 viewer 同一快照版本下过滤结果确定）。
+func filterEntriesByBlocks(entries []cachedFeedEntry, viewerID int64) []cachedFeedEntry {
+	if viewerID <= 0 || len(entries) == 0 {
+		return entries
+	}
+	blocked, err := mysql.BlockedIDsFor(viewerID)
+	if err != nil || len(blocked) == 0 {
+		return entries
+	}
+	set := make(map[string]struct{}, len(blocked))
+	for _, id := range blocked {
+		set[strconv.FormatInt(id, 10)] = struct{}{}
+	}
+	out := make([]cachedFeedEntry, 0, len(entries))
+	for _, e := range entries {
+		if _, hit := set[e.Item.Author.UserID]; !hit {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // parseOffsetAndSnapshot 解析 offset 游标并校验快照版本：
@@ -326,8 +350,8 @@ func parseOffsetAndSnapshot(cursor string, userID int64) (int, *cachedFeedSnapsh
 }
 
 // GetLatestFeed 最新流（时间 + id 双字段游标）
-func GetLatestFeed(cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
-	return timeOrderedFeed(cursor, limit, nil)
+func GetLatestFeed(viewerID int64, cursor string, limit int) (*models.PageResult[*models.FeedItem], error) {
+	return timeOrderedFeed(viewerID, cursor, limit, nil)
 }
 
 // GetFollowingFeed 关注流（需登录）
@@ -341,11 +365,11 @@ func GetFollowingFeed(userID int64, cursor string, limit int) (*models.PageResul
 			Items: make([]*models.FeedItem, 0), NextCursor: "", HasMore: false,
 		}, nil
 	}
-	return timeOrderedFeed(cursor, limit, ids)
+	return timeOrderedFeed(userID, cursor, limit, ids)
 }
 
 // timeOrderedFeed 时间序 Feed 的公共实现（authorIDs 为 nil 时不限作者）
-func timeOrderedFeed(cursor string, limit int, authorIDs []int64) (*models.PageResult[*models.FeedItem], error) {
+func timeOrderedFeed(viewerID int64, cursor string, limit int, authorIDs []int64) (*models.PageResult[*models.FeedItem], error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -367,9 +391,9 @@ func timeOrderedFeed(cursor string, limit int, authorIDs []int64) (*models.PageR
 	var rows []*mysql.FeedRow
 	var err error
 	if authorIDs == nil {
-		rows, err = mysql.LatestFeedPage(cursorTime, cursorType, cursorID, limit+1)
+		rows, err = mysql.LatestFeedPage(cursorTime, cursorType, cursorID, limit+1, viewerID)
 	} else {
-		rows, err = mysql.FollowingFeedPage(authorIDs, cursorTime, cursorType, cursorID, limit+1)
+		rows, err = mysql.FollowingFeedPage(authorIDs, cursorTime, cursorType, cursorID, limit+1, viewerID)
 	}
 	if err != nil {
 		return nil, err

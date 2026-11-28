@@ -59,6 +59,9 @@ func TestInteractionConsistency(t *testing.T) {
 		moderation_status tinyint NOT NULL DEFAULT 1, deleted_at timestamp NULL DEFAULT NULL,
 		create_time timestamp NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id),
 		UNIQUE KEY uk_comment_id (comment_id)) ENGINE=InnoDB`)
+	mustExec(t, `CREATE TABLE user_block (
+		id bigint NOT NULL AUTO_INCREMENT, user_id bigint NOT NULL, blocked_id bigint NOT NULL,
+		PRIMARY KEY (id), UNIQUE KEY uk_user_block (user_id, blocked_id)) ENGINE=InnoDB`)
 	mustExec(t, `CREATE TABLE notification (
 		id bigint NOT NULL AUTO_INCREMENT, notification_id bigint NOT NULL, user_id bigint NOT NULL,
 		actor_id bigint NOT NULL, type tinyint NOT NULL, target_type tinyint NOT NULL,

@@ -26,6 +26,9 @@ func Init() error {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
+	// 评论编辑窗口（第五阶段 PRD F4，秒）
+	viper.SetDefault("comment.edit_window", 300)
+
 	viper.SetConfigName("config")     // 配置文件名称 不需要带后缀
 	viper.SetConfigType("yaml")       // 配置文件类型
 	viper.AddConfigPath("./")         // 配置文件路径（项目根）

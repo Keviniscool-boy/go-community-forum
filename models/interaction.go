@@ -50,6 +50,25 @@ type Comment struct {
 	ModerationStatus int32        `json:"-" db:"moderation_status"`
 	DeletedAt        sql.NullTime `json:"-" db:"deleted_at"`
 	CreateTime       time.Time    `json:"create_time" db:"create_time"`
+	UpdateTime       sql.NullTime `json:"-" db:"update_time"` // 编辑时间（>create_time 视为已编辑）
+}
+
+// BlockedUserItem 黑名单条目
+type BlockedUserItem struct {
+	BlockedID  int64      `json:"user_id,string" db:"blocked_id"`
+	Username   string     `json:"username" db:"username"`
+	AvatarURL  string     `json:"avatar_url" db:"avatar_url"`
+	CreateTime time.Time  `json:"create_time" db:"create_time"`
+}
+
+// FollowListUser 关注/粉丝列表条目（PRD F1）
+type FollowListUser struct {
+	UserID       string `json:"user_id,string" db:"user_id"`
+	Username     string `json:"username" db:"username"`
+	AvatarURL    string `json:"avatar_url" db:"avatar_url"`
+	Bio          string `json:"bio" db:"bio"`
+	IsFollowing  bool   `json:"is_following"`           // 登录视角下我是否已关注对方；游客恒 false
+	ListCursorID int64  `json:"-" db:"follow_id"` // 分页游标（不输出）
 }
 
 // ApiCommentDetail 评论详情（含评论者信息）
@@ -155,4 +174,9 @@ type NotificationDetailPage struct {
 	Items      []*ApiNotificationDetail `json:"items"`
 	NextCursor string                   `json:"next_cursor"`
 	HasMore    bool                     `json:"has_more"`
+}
+
+// ParamEditComment 评论编辑请求（第五阶段 F4）
+type ParamEditComment struct {
+	Content string `json:"content" binding:"required,min=1,max=2000"`
 }

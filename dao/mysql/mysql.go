@@ -67,6 +67,11 @@ func GetDB() *sqlx.DB {
 }
 
 // setGlobalDB 测试用：替换全局数据库连接（migrate_test.go 使用）
+// SetGlobalDB / GetGlobalDB 供跨包集成测试与只读批查使用（写路径一律走 DAO 函数）
+func SetGlobalDB(d *sqlx.DB) { setGlobalDB(d) }
+
+func GetGlobalDB() *sqlx.DB { return db }
+
 func setGlobalDB(d *sqlx.DB) {
 	db = d
 }

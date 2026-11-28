@@ -102,7 +102,7 @@ func TestCommentThreadLifecycle(t *testing.T) {
 	if n := queryCount(t, "SELECT COUNT(*) FROM notification WHERE user_id = 2 AND actor_id = 1 AND type = 6"); n != 1 {
 		t.Fatalf("reply-to-reply notification to root author = %d, want 1", n)
 	}
-	replies, err := ListCommentReplies(101, sql.NullTime{}, 0, 20)
+	replies, err := ListCommentReplies(101, 0, sql.NullTime{}, 0, 20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestCommentThreadLifecycle(t *testing.T) {
 	if len(top) != 1 || top[0].CommentID != 101 || !top[0].DeletedAt.Valid || top[0].ReplyCount != 3 {
 		t.Fatalf("deleted comment with replies should be kept as placeholder, got %+v", top)
 	}
-	if replies, err = ListCommentReplies(101, sql.NullTime{}, 0, 20); err != nil || len(replies) != 3 {
+	if replies, err = ListCommentReplies(101, 0, sql.NullTime{}, 0, 20); err != nil || len(replies) != 3 {
 		t.Fatalf("replies under deleted comment must remain, got %d err=%v", len(replies), err)
 	}
 
@@ -295,7 +295,7 @@ func TestCommentCursorPagination(t *testing.T) {
 	cursorID = 0
 	cursorTime = sql.NullTime{}
 	for {
-		rows, err := ListCommentReplies(200, cursorTime, cursorID, 2)
+		rows, err := ListCommentReplies(200, 0, cursorTime, cursorID, 2)
 		if err != nil {
 			t.Fatal(err)
 		}

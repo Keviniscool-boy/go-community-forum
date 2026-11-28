@@ -43,7 +43,7 @@ type CommentRow struct {
 }
 
 const commentRowColumns = "c.comment_id, c.user_id, c.target_type, c.target_id, c.parent_id, c.reply_to_user_id, " +
-	"c.content, c.status, c.moderation_status, c.deleted_at, c.create_time, c.like_count, c.reply_count"
+	"c.content, c.status, c.moderation_status, c.deleted_at, c.create_time, c.update_time, c.like_count, c.reply_count"
 
 // CommentPageParams 评论分页查询参数（cursor）
 type CommentPageParams struct {
@@ -52,6 +52,7 @@ type CommentPageParams struct {
 	CursorTime sql.NullTime
 	CursorID   int64
 	Limit      int
+	ViewerID   int64 // 拉黑过滤（0 = 游客不过滤）
 }
 
 // ListComments 按 cursor 分页查询目标的一级评论（最新在前）
@@ -61,7 +62,8 @@ func ListComments(p *CommentPageParams) (rows []*CommentRow, err error) {
 	query := "SELECT " + commentRowColumns + " FROM comment c" +
 		" WHERE c.target_type = ? AND c.target_id = ? AND c.parent_id = 0" +
 		" AND ((" + commentVisibleSQL("c") + " AND " + commentAuthorAliveSQL("c") + ")" +
-		" OR (c.deleted_at IS NOT NULL AND " + commentWithVisibleRepliesSQL("c") + "))"
+		" OR (c.deleted_at IS NOT NULL AND " + commentWithVisibleRepliesSQL("c") + "))" +
+		FilterBlockViewerSQL(p.ViewerID, "c.user_id")
 	args := []interface{}{p.TargetType, p.TargetID}
 	if p.CursorID != 0 {
 		query += " AND (c.create_time < ? OR (c.create_time = ? AND c.comment_id < ?))"
@@ -77,10 +79,11 @@ func ListComments(p *CommentPageParams) (rows []*CommentRow, err error) {
 
 // ListCommentReplies 按 cursor 分页查询某条一级评论下的回复（最早在前，符合对话阅读顺序）
 // 回复行带 reply_to_user_id：回复的对象本身也是回复时，前端展示「回复 @xxx」。
-func ListCommentReplies(parentID int64, cursorTime sql.NullTime, cursorID int64, limit int) (rows []*CommentRow, err error) {
+func ListCommentReplies(parentID int64, viewerID int64, cursorTime sql.NullTime, cursorID int64, limit int) (rows []*CommentRow, err error) {
 	rows = make([]*CommentRow, 0)
 	query := "SELECT " + commentRowColumns + " FROM comment c" +
-		" WHERE c.parent_id = ? AND " + commentVisibleSQL("c") + " AND " + commentAuthorAliveSQL("c")
+		" WHERE c.parent_id = ? AND " + commentVisibleSQL("c") + " AND " + commentAuthorAliveSQL("c") +
+		FilterBlockViewerSQL(viewerID, "c.user_id")
 	args := []interface{}{parentID}
 	if cursorID != 0 {
 		query += " AND (c.create_time > ? OR (c.create_time = ? AND c.comment_id > ?))"
@@ -94,11 +97,25 @@ func ListCommentReplies(parentID int64, cursorTime sql.NullTime, cursorID int64,
 	return rows, nil
 }
 
+// UpdateCommentContent 作者编辑评论内容（PRD F4）：
+// 条件更新保证作者与存活状态；moderation_status 重走发布审核流由业务层决定；
+// update_time 由 ON UPDATE CURRENT_TIMESTAMP 自动刷新（>create_time 即"已编辑"）。
+func UpdateCommentContent(commentID, userID int64, content string, moderationStatus int32) (bool, error) {
+	result, err := db.Exec(
+		"UPDATE comment SET content = ?, moderation_status = ? WHERE comment_id = ? AND user_id = ? AND status = 1 AND deleted_at IS NULL",
+		content, moderationStatus, commentID, userID)
+	if err != nil {
+		return false, err
+	}
+	n, _ := result.RowsAffected()
+	return n > 0, nil
+}
+
 // GetCommentByID 查询单条评论（回复时校验父评论；不过滤可见性，由调用方判断）
 func GetCommentByID(id int64) (*models.Comment, error) {
 	cm := new(models.Comment)
 	err := db.Get(cm, "SELECT comment_id, user_id, target_type, target_id, parent_id, reply_to_user_id, content, status, "+
-		"moderation_status, deleted_at, create_time FROM comment WHERE comment_id = ?", id)
+		"moderation_status, deleted_at, create_time, update_time FROM comment WHERE comment_id = ?", id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrCommentNotExist
