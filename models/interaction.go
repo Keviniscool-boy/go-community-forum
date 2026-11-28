@@ -64,7 +64,7 @@ type BlockedUserItem struct {
 
 // FollowListUser 关注/粉丝列表条目（PRD F1）
 type FollowListUser struct {
-	UserID       string `json:"user_id,string" db:"user_id"`
+	UserID       string `json:"user_id" db:"user_id"`
 	Username     string `json:"username" db:"username"`
 	AvatarURL    string `json:"avatar_url" db:"avatar_url"`
 	Bio          string `json:"bio" db:"bio"`

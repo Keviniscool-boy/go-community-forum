@@ -4,6 +4,7 @@ package controller
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -110,7 +111,7 @@ func OpenDirectMessageHandler(c *gin.Context) {
 		respondMessageError(c, err)
 		return
 	}
-	ResponseSuccess(c, gin.H{"thread_id": threadID, "message": msg})
+	ResponseSuccess(c, gin.H{"thread_id": strconv.FormatInt(threadID, 10), "message": msg})
 }
 
 // ReplyMessageHandler 会话内发消息
@@ -137,7 +138,7 @@ func ReplyMessageHandler(c *gin.Context) {
 		respondMessageError(c, err)
 		return
 	}
-	ResponseSuccess(c, gin.H{"thread_id": threadID, "message": msg})
+	ResponseSuccess(c, gin.H{"thread_id": strconv.FormatInt(threadID, 10), "message": msg})
 }
 
 // DeleteThreadHandler 删除会话（仅自己视角）

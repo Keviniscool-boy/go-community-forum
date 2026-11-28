@@ -47,6 +47,11 @@ func FollowUserHandler(c *gin.Context) {
 			ResponseError(c, CodeInvalidParams)
 			return
 		}
+		// 拉黑拒绝：统一文案"对方暂不接受关注"，不暴露关系状态（PRD F2）
+		if errors.Is(err, logic.ErrFollowBlocked) {
+			ResponseErrorWithMsg(c, CodeForbidden, "对方暂不接受关注")
+			return
+		}
 		ResponseError(c, CodeServerBusy)
 		return
 	}
